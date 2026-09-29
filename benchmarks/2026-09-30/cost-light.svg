@@ -1,0 +1,22 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='720' height='290' viewBox='0 0 720 290' font-family='-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif'>
+<rect width='100%' height='100%' fill='#fcfcfb'/>
+<text x='24' y='30' font-size='17' font-weight='600' fill='#0b0b0b'>Cost (USD, list price)</text>
+<text x='24' y='50' font-size='12.5' fill='#52514e'>Same run as above</text>
+<line x1='56' x2='696' y1='236.0' y2='236.0' stroke='#e4e3de'/><text x='48' y='240.0' font-size='11' fill='#52514e' text-anchor='end'>$0.00</text>
+<line x1='56' x2='696' y1='195.0' y2='195.0' stroke='#e4e3de'/><text x='48' y='199.0' font-size='11' fill='#52514e' text-anchor='end'>$1.00</text>
+<line x1='56' x2='696' y1='154.0' y2='154.0' stroke='#e4e3de'/><text x='48' y='158.0' font-size='11' fill='#52514e' text-anchor='end'>$2.00</text>
+<line x1='56' x2='696' y1='113.0' y2='113.0' stroke='#e4e3de'/><text x='48' y='117.0' font-size='11' fill='#52514e' text-anchor='end'>$3.00</text>
+<line x1='56' x2='696' y1='72.0' y2='72.0' stroke='#e4e3de'/><text x='48' y='76.0' font-size='11' fill='#52514e' text-anchor='end'>$4.00</text>
+<path d='M149.5 236.0 v-118.2 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v118.2 z' fill='#2a78d6'/>
+<text x='181.5' y='107.8' font-size='12' font-weight='600' fill='#0b0b0b' text-anchor='middle'>$2.98</text>
+<path d='M215.5 236.0 v-76.5 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v76.5 z' fill='#eb6834'/>
+<text x='247.5' y='149.5' font-size='12' font-weight='600' fill='#0b0b0b' text-anchor='middle'>$1.96</text>
+<text x='214.5' y='256' font-size='13' fill='#0b0b0b' text-anchor='middle'>Case 1: roulette mini-game</text>
+<path d='M466.5 236.0 v-134.2 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v134.2 z' fill='#2a78d6'/>
+<text x='498.5' y='91.8' font-size='12' font-weight='600' fill='#0b0b0b' text-anchor='middle'>$3.37</text>
+<path d='M532.5 236.0 v-41.8 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v41.8 z' fill='#eb6834'/>
+<text x='564.5' y='184.2' font-size='12' font-weight='600' fill='#0b0b0b' text-anchor='middle'>$1.12</text>
+<text x='531.5' y='256' font-size='13' fill='#0b0b0b' text-anchor='middle'>Case 2: pinball mini-game</text>
+<rect x='56' y='268' width='12' height='12' rx='3' fill='#2a78d6'/><text x='74' y='278' font-size='12' fill='#52514e'>with brain</text>
+<rect x='176' y='268' width='12' height='12' rx='3' fill='#eb6834'/><text x='194' y='278' font-size='12' fill='#52514e'>without brain (same model)</text>
+</svg>

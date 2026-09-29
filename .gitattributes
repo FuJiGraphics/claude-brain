@@ -1,0 +1,13 @@
+# 셸 스크립트와 설정 파일은 어느 플랫폼에서 clone 해도 LF 를 유지한다.
+# Windows 에서 core.autocrlf=true 로 받으면 CRLF 가 되어 bash 가 셔뱅과 줄 끝의 \r 에서 깨진다.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.mode text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.svg text eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary

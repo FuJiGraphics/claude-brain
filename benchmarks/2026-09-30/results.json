@@ -1,0 +1,31 @@
+{
+ "date": "2026-09-30",
+ "cases": [
+  {
+   "case": "Case 1: roulette mini-game",
+   "score_brain": 34.0,
+   "score_vanilla": 29.0,
+   "minutes_brain": 9.9,
+   "minutes_vanilla": 6.9,
+   "cost_brain": 2.98,
+   "cost_vanilla": 1.96,
+   "reviewer_winner": [
+    "BRAIN",
+    "BRAIN"
+   ]
+  },
+  {
+   "case": "Case 2: pinball mini-game",
+   "score_brain": 30.5,
+   "score_vanilla": 22.0,
+   "minutes_brain": 13.9,
+   "minutes_vanilla": 4.7,
+   "cost_brain": 3.37,
+   "cost_vanilla": 1.12,
+   "reviewer_winner": [
+    "BRAIN",
+    "BRAIN"
+   ]
+  }
+ ]
+}

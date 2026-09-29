@@ -1,0 +1,22 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='720' height='290' viewBox='0 0 720 290' font-family='-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif'>
+<rect width='100%' height='100%' fill='#1a1a19'/>
+<text x='24' y='30' font-size='17' font-weight='600' fill='#ffffff'>Wall-clock time (minutes)</text>
+<text x='24' y='50' font-size='12.5' fill='#c3c2b7'>Same model (Sonnet 5.5, medium), same request, separate clones</text>
+<line x1='56' x2='696' y1='236.0' y2='236.0' stroke='#3a3a37'/><text x='48' y='240.0' font-size='11' fill='#c3c2b7' text-anchor='end'>0.0</text>
+<line x1='56' x2='696' y1='195.0' y2='195.0' stroke='#3a3a37'/><text x='48' y='199.0' font-size='11' fill='#c3c2b7' text-anchor='end'>3.8</text>
+<line x1='56' x2='696' y1='154.0' y2='154.0' stroke='#3a3a37'/><text x='48' y='158.0' font-size='11' fill='#c3c2b7' text-anchor='end'>7.5</text>
+<line x1='56' x2='696' y1='113.0' y2='113.0' stroke='#3a3a37'/><text x='48' y='117.0' font-size='11' fill='#c3c2b7' text-anchor='end'>11.2</text>
+<line x1='56' x2='696' y1='72.0' y2='72.0' stroke='#3a3a37'/><text x='48' y='76.0' font-size='11' fill='#c3c2b7' text-anchor='end'>15.0</text>
+<path d='M149.5 236.0 v-104.7 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v104.7 z' fill='#3987e5'/>
+<text x='181.5' y='121.3' font-size='12' font-weight='600' fill='#ffffff' text-anchor='middle'>9.9</text>
+<path d='M215.5 236.0 v-71.1 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v71.1 z' fill='#d95926'/>
+<text x='247.5' y='154.9' font-size='12' font-weight='600' fill='#ffffff' text-anchor='middle'>6.9</text>
+<text x='214.5' y='256' font-size='13' fill='#ffffff' text-anchor='middle'>Case 1: roulette mini-game</text>
+<path d='M466.5 236.0 v-148.5 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v148.5 z' fill='#3987e5'/>
+<text x='498.5' y='77.5' font-size='12' font-weight='600' fill='#ffffff' text-anchor='middle'>13.9</text>
+<path d='M532.5 236.0 v-47.8 a4 4 0 0 1 4 -4 h56.0 a4 4 0 0 1 4 4 v47.8 z' fill='#d95926'/>
+<text x='564.5' y='178.2' font-size='12' font-weight='600' fill='#ffffff' text-anchor='middle'>4.7</text>
+<text x='531.5' y='256' font-size='13' fill='#ffffff' text-anchor='middle'>Case 2: pinball mini-game</text>
+<rect x='56' y='268' width='12' height='12' rx='3' fill='#3987e5'/><text x='74' y='278' font-size='12' fill='#c3c2b7'>with brain</text>
+<rect x='176' y='268' width='12' height='12' rx='3' fill='#d95926'/><text x='194' y='278' font-size='12' fill='#c3c2b7'>without brain (same model)</text>
+</svg>
