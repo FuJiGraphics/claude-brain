@@ -1,8 +1,8 @@
 #!/bin/bash
 # brain 설정 - 켜기,끄기와 해마(hippocampus) 모델,effort. 값은 <brain>/.active/config 에 한 줄씩 남는다(기기 로컬, 저장소에 안 올라간다).
 # 사용법: config.sh [show] | on | off | preset <default|eco|quality> | model <sonnet|opus|haiku> | effort <low|medium|high|xhigh|max|auto>
-#   default = Sonnet 5.5, effort high   (2026-09-29 새기기 시험을 이 설정으로 했다)
-#   eco     = Sonnet 5.5, effort medium (사용량 절약)
+#   default = Sonnet 5.5, effort medium (2026-09-30 실측: high 대비 턴 절반, 격리 시험 3건 품질 차이 없음)
+#   eco     = Sonnet 5.5, effort low    (사용량 최소 - 품질은 재지 않았다)
 #   quality = Opus 5.5, effort high
 #   off 는 떠올림, 조사 습관 한 줄, 재생 투입, 밤 잠을 멈춘다(기억은 그대로 남는다). 돌고 있는 해마는 지금 항목이 끝나면 선다.
 set -u
@@ -48,8 +48,8 @@ case "${1:-show}" in
   off) put enabled 0; stop_daemon; show ;;
   preset)
     case "${2:-}" in
-      default) put hippocampus_model claude-sonnet-5-5; put hippocampus_effort high ;;
-      eco) put hippocampus_model claude-sonnet-5-5; put hippocampus_effort medium ;;
+      default) put hippocampus_model claude-sonnet-5-5; put hippocampus_effort medium ;;
+      eco) put hippocampus_model claude-sonnet-5-5; put hippocampus_effort low ;;
       quality) put hippocampus_model claude-opus-5-5; put hippocampus_effort high ;;
       *) echo "사용법: config.sh preset <default|eco|quality>"; exit 2 ;;
     esac

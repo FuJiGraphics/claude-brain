@@ -1,7 +1,7 @@
 #!/bin/bash
 # brain hippocampus 데몬 - 세션과 독립된 프로세스. 큐를 순서대로 비운다.
 # 단일 실행: lock/ 디렉터리(mkdir 원자성) + pid. 항목마다 새 `claude -p` 1회(컨텍스트 새로, 폭주 방지).
-# 중지: hippocampus-ctl.sh stop (항목 경계에서 종료). 모델,effort 는 /brain config(.active/config, 기본 Sonnet 5.5 high). 턴, 벽시계 상한은 모드별(루프 안 case).
+# 중지: hippocampus-ctl.sh stop (항목 경계에서 종료). 모델,effort 는 /claude-brain-config(.active/config, 기본 Sonnet 5.5 medium). 턴, 벽시계 상한은 모드별(루프 안 case).
 set -u
 SKILL="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$SKILL"
@@ -20,11 +20,11 @@ IDLE_ROUNDS=2; IDLE_SLEEP="${N_WORKER_IDLE_SLEEP:-30}"
 ITEM_MAX_SEC="${N_WORKER_ITEM_MAX_SEC:-}"   # 항목당 벽시계 상한(초) 강제값. 비우면 모드별 기본(루프 안 case). 넘으면 자식 claude 를 죽이고 timeout 으로 기록한다 - 멈춘 자식이 잠금을 영영 쥐지 않게.
 FAST_FAIL_SEC="${N_WORKER_FAST_FAIL_SEC:-20}"  # 이보다 빨리 비정상 종료하면 CLI/플래그/로그인 문제다 - 큐 전체를 초 단위로 태우지 않고 데몬을 멈춘다.
 POLL_SEC="${N_WORKER_POLL_SEC:-15}"
-# 해마 모델,effort - /brain config 가 .active/config 에 남긴 값(기본 Sonnet 5.5, high). 환경변수 HIPPOCAMPUS_MODEL, HIPPOCAMPUS_EFFORT 가 있으면 그것이 먼저다.
+# 해마 모델,effort - /claude-brain-config 가 .active/config 에 남긴 값(기본 Sonnet 5.5, medium - 2026-09-30 실측 high 대비 턴 절반, 품질 차이 없음). 환경변수 HIPPOCAMPUS_MODEL, HIPPOCAMPUS_EFFORT 가 있으면 그것이 먼저다.
 # effort 가 auto 면 모드별 기본(아래 case)을 쓴다.
 cfgv() { sed -n "s/^$1=//p" "$SKILL/.active/config" 2>/dev/null | tail -1; }
 MODEL="${HIPPOCAMPUS_MODEL:-$(cfgv hippocampus_model)}"; MODEL="${MODEL:-claude-sonnet-5-5}"
-EFFORT_FORCE="${HIPPOCAMPUS_EFFORT:-$(cfgv hippocampus_effort)}"; EFFORT_FORCE="${EFFORT_FORCE:-high}"; [ "$EFFORT_FORCE" = auto ] && EFFORT_FORCE=""
+EFFORT_FORCE="${HIPPOCAMPUS_EFFORT:-$(cfgv hippocampus_effort)}"; EFFORT_FORCE="${EFFORT_FORCE:-medium}"; [ "$EFFORT_FORCE" = auto ] && EFFORT_FORCE=""
 mkdir -p "$C/queue" "$C/processing" "$C/done" "$C/logs"
 
 # 경로는 모델과 도구가 읽는 표기(nw_tool_path)로 넘긴다. macOS/Linux 는 그대로, Windows 는 C:/... 표기.
@@ -128,7 +128,10 @@ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("project_root",""))
     [ -n "$ITEM_MAX_SEC" ] && item_max="$ITEM_MAX_SEC"
     [ -n "$EFFORT_FORCE" ] && effort="$EFFORT_FORCE"
     req_n="$(nw_tool_path "$req")"; done_n="$(nw_tool_path "$done_file")"; root_n="$(nw_tool_path "$root")"
-    prompt="너는 brain 의 hippocampus(해마)다. 먼저 $cur_n 를 읽고 그 지침대로 행동하라 - 특히 '큐 실행 형태' 절. 오늘 날짜: $(date +%F). brain 경로: $skill_n. 기억 저장소(cortex) 경로: $nb_n. 요청 파일: $req_n (mode=$mode, 이 JSON 의 payload 가 네 입력이다). 끝나면 결과 JSON 을 $done_n 에 써라(형식은 hippocampus.md '돌려줄 것' 의 큐 형식). 하위 서브에이전트는 쓰지 않는다 - 전부 직접 한다. 노트북($nb_n) 밖은 수정하지 않는다. 프로젝트 루트($root_n)는 읽기만 한다. git 으로 커밋, 푸시, 체크아웃, 리셋을 하지 않는다. 경로는 받은 표기 그대로 쓴다. 말하지 마라 - 서술,진행 보고,요약 출력 없이 도구 호출만 하고, 마지막 출력은 'done: $done_n' 한 줄이다."
+    # 지침은 이번 모드에 필요한 절만 시스템 프롬프트에 붙인다 - 파일로 읽히면 그 도구 결과가 매 턴 다시 읽히고, 안 쓰는 절도 함께 실린다
+    brief="$(nw_py "$SKILL/scripts/hippocampus-brief.py" "$SKILL/agents/hippocampus.md" "$mode" 2>/dev/null)"
+    [ -n "$brief" ] || brief="$(cat "$SKILL/agents/hippocampus.md")"
+    prompt="너는 brain 의 hippocampus(해마)다. 지침은 시스템 프롬프트 끝의 hippocampus 지침이다(원본 $cur_n 에서 이번 모드에 필요한 절만 실었다 - 원본을 다시 읽지 않는다. 빠진 절이 꼭 필요하면 원본에서 그 절만 sed -n 으로 본다). 특히 '큐 실행 형태' 절대로 행동하라. 오늘 날짜: $(date +%F). brain 경로: $skill_n. 기억 저장소(cortex) 경로: $nb_n. 요청 파일: $req_n (mode=$mode, 이 JSON 의 payload 가 네 입력이다). 끝나면 결과 JSON 을 $done_n 에 써라(형식은 hippocampus.md '돌려줄 것' 의 큐 형식). 하위 서브에이전트는 쓰지 않는다 - 전부 직접 한다. 노트북($nb_n) 밖은 수정하지 않는다. 프로젝트 루트($root_n)는 읽기만 한다. git 으로 커밋, 푸시, 체크아웃, 리셋을 하지 않는다. 경로는 받은 표기 그대로 쓴다. 말하지 마라 - 서술,진행 보고,요약 출력 없이 도구 호출만 하고, 마지막 출력은 'done: $done_n' 한 줄이다."
     # 프로젝트 루트가 없으면(옮겨짐, 삭제) --add-dir 을 빼고 띄운다 - 있지 않은 폴더를 주면 claude 가 시작 전에 종료한다.
     ADD_DIR=""; [ -n "$root" ] && [ -d "$root" ] && ADD_DIR="$root_n"
     # 거부 규칙은 bypassPermissions 에서도 유효하다(문서). git 쓰기, 삭제, 하네스 설정과 모든 스킬 본문(n-worker 등 이웃 스킬 포함) 편집을 막는다.
@@ -136,7 +139,8 @@ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("project_root",""))
     (cd "$NB" && exec claude -p "$prompt" \
       --name "hippocampus-$id" --model "$MODEL" --effort "$effort" \
       --permission-mode "$PERM_MODE" \
-      --tools "Read,Edit,Write,Grep,Glob,Bash,WebFetch,WebSearch,Skill" \
+      --tools "Read,Edit,Write,Grep,Glob,Bash,WebFetch,WebSearch" \
+      --disable-slash-commands --append-system-prompt "$brief" \
       --allowedTools "Read" "Edit" "Write" "Grep" "Glob" "Bash(python3 *)" "Bash(python *)" "Bash(py *)" "Bash(ls *)" "Bash(wc *)" "Bash(cat *)" "Bash(sed *)" "Bash(mv *)" "Bash(cp *)" "Bash(mkdir *)" "Bash(date *)" "Bash(git -C * log*)" "Bash(git -C * show*)" "Bash(git -C * rev-parse*)" "Bash(git -C * diff*)" \
       --disallowedTools \
         "Bash(git push*)" "Bash(git commit*)" "Bash(git reset*)" "Bash(git checkout*)" "Bash(git switch*)" "Bash(git stash*)" "Bash(git rebase*)" "Bash(git merge*)" "Bash(git restore*)" "Bash(git clean*)" "Bash(git rm*)" "Bash(git mv*)" "Bash(git add*)" \
