@@ -3,7 +3,7 @@ name: brain
 description: >
   장기 기억 제어판. 사용자가 /brain 으로 부를 때만 쓴다. 기억 자체는 호출 없이 늘 돈다 - thalamus 훅이 지금 다루는
   파일, 명령, 에러에 걸린 기억을 떠올리고, hippocampus 가 대화록을 되짚어 새기고, 밤마다 잠이 정리와 망각을 한다.
-  이 스킬은 상태 보기, 기억 찾기, 직접 새기기, 지금 잠들기, 사용자 판단 대기 처리를 한다.
+  이 스킬은 상태 보기, 기억 찾기, 직접 새기기, 지금 잠들기를 한다. 명령마다 /claude-brain-<명령> 단축 명령이 따로 있다.
 disable-model-invocation: true
 ---
 
@@ -21,23 +21,24 @@ disable-model-invocation: true
 
 ## 사용자가 부르는 일
 
-`/brain` 뒤의 말로 고른다. 결과는 사용자에게 짧게 보고한다(표준 용어, 표).
+명령마다 단축 명령 `/claude-brain-<명령>` 이 있다(설치가 `<설정 폴더>/commands/` 에 만든다). `/brain <명령>` 으로 불러도 같다.
+**훅이 바로 처리**하는 명령은 모델을 거치지 않아 토큰을 쓰지 않고, 이 스킬까지 오지 않는다. 여기까지 왔으면 훅이 꺼진 것이니 아래 스크립트를 직접 돌린다.
 
-| 명령 | 할 일 |
-|---|---|
-| (없음), `status` | `bash <brain>/scripts/status.sh` 출력을 요약한다 - 켜짐 여부와 해마 설정, 해마 큐와 실패, 마지막 잠, 오늘 떠올림 수, 검사 결과, 판단 대기 수 |
-| `on`, `off` | 보통은 훅이 먼저 처리해 이 스킬까지 오지 않는다(caveman 처럼 즉시, 토큰 없이). 여기까지 왔으면 `bash <brain>/scripts/config.sh on` 또는 `off`. 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 이 사라진다. 기억은 그대로 남는다 |
-| `config` | 뒤에 `default`, `eco`, `quality` 가 있으면 훅이 바로 처리한다. 없으면 `config.sh show` 로 지금 값을 보여 주고 `AskUserQuestion` 한 번으로 고르게 한다 - default(Sonnet 5.5, effort high, 권장), eco(Sonnet 5.5, effort medium, 사용량 절약), quality(Opus 5.5, effort high). 고른 것을 `config.sh preset <이름>` 으로 반영하고 결과 두 줄을 보여 준다 |
-| `model <sonnet\|opus\|haiku>`, `effort <low\|medium\|high\|xhigh\|max\|auto>` | 훅이 바로 처리한다. 여기까지 왔으면 `config.sh model <이름>` 또는 `config.sh effort <값>` |
-| `recall <이름>...` | `bash <brain>/scripts/recall.sh <이름>...` (현재 폴더의 프로젝트 기준). 결과의 기억 경로를 알려 준다 |
-| `remember <내용>` | `bash <brain>/scripts/remember.sh "<내용과 근거>"` - 해마 큐에 넣고 끝난다. 근거(file:line 이나 사용자 발화)를 함께 적어야 해마가 확인할 수 있다 |
-| `sleep` (지금 잠들기) | `bash <brain>/scripts/sleep.sh` - 투입만 하고 곧 끝난다. 처리는 해마가 뒤에서 한다 |
-| `results` | `bash <brain>/scripts/hippocampus-ctl.sh results` (본 것은 `--ack`) |
-| `pending` | `<brain>/cortex/.pending.md` 를 읽고 사용자가 결정할 것만 묶어서 `AskUserQuestion` 으로 묻는다. 답은 `remember.sh` 로 해마에 넘긴다 |
-| `stop` | `bash <brain>/scripts/hippocampus-ctl.sh stop` (지금 항목이 끝나면 멈춘다) |
+| 명령 | 할 일 | 처리 |
+|---|---|---|
+| `status` (인자 없는 `/brain` 포함) | `bash <brain>/scripts/status.sh` - 켜짐, 해마 설정과 큐, 실패, 마지막 잠, 검사, 최근 떠올림 | 훅 |
+| `on`, `off` | `bash <brain>/scripts/config.sh on` 또는 `off`. 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 이 사라진다. 기억은 남는다 | 훅 |
+| `config [default\|eco\|quality]` | 값이 있으면 `config.sh preset <이름>`, 없으면 `config.sh show`. default = Sonnet 5.5 high, eco = Sonnet 5.5 medium, quality = Opus 5.5 high | 훅 |
+| `model <sonnet\|opus\|haiku>`, `effort <low\|medium\|high\|xhigh\|max\|auto>` | `config.sh model <이름>`, `config.sh effort <값>` | 훅 |
+| `stop` | `bash <brain>/scripts/hippocampus-ctl.sh stop` (지금 항목이 끝나면 멈춘다) | 훅 |
+| `sleep` | `bash <brain>/scripts/sleep.sh` - 투입만 하고 곧 끝난다. 처리는 해마가 뒤에서 한다 | 훅 |
+| `results` | `bash <brain>/scripts/hippocampus-ctl.sh results --brief` (전체는 `results`, 본 것 표시는 `--ack`) | 훅 |
+| `recall <이름>...` | 현재 폴더에서 `bash <brain>/scripts/recall.sh <이름>...`. 찾은 기억의 요지와 경로를 알려 준다 | 모델 |
+| `remember <내용>` | `bash <brain>/scripts/remember.sh "<내용> - 근거: <file:line 또는 사용자 발화>"` - 해마 큐에 넣고 끝난다. 근거는 대화에서 찾아 붙이고 사용자에게 되묻지 않는다 | 모델 |
 
 ## 지키는 것
 
 - cortex 쓰기는 hippocampus 만 한다(여기서도 직접 고치지 않는다). 사용자의 요청은 `remember.sh` 로 넘긴다.
 - 하드 삭제는 없다. 잊은 기억은 `dormant.md`(잠재) 또는 `_archive/` 로 옮겨진다.
-- 설치, 훅 등록, 잠 예약은 README 의 설치 절을 따른다.
+- 해마는 사용자에게 묻지 않는다. 판단이 필요한 것은 해마가 정하고, 코드 문제는 사실로 기억해 그 코드를 만지는 세션에 떠오르게 한다.
+- 설치, 훅 등록, 잠 예약, 명령어 파일은 README 의 설치 절을 따른다.

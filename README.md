@@ -79,6 +79,7 @@ Claude Code 로 오래 일하다 보면 반복되는 문제가 있다:
 | 세션이 매번 백지에서 시작한다 - 프로젝트 구조, 컨벤션, 이미 밟은 함정을 다시 설명하거나, 빼먹어서 사고가 난다 | **cortex** - 확인된 사실만 쌓고, 세션이 시작될 때 그 프로젝트의 요지와 INDEX 를 보여 준다 |
 | 세션에게 기억을 챙기라고 시키면 지켜지지 않는다 - 파일을 고치기 전에 기억을 대조하라는 강제 규칙이 Edit, Write 6,300건 중 1,264건(20%)에서 지켜지지 않았다. Bash 쓰기는 893건 중 290건(32%)이었다 | **thalamus** - 규칙 대신 훅이 걸린 기억을 떠올려 준다. 세션이 할 일이 없다 |
 | 세션이 시켜야 도는 정비는 돌지 않는다 - 이전 구조의 큐 이력 668건 중 기록 322건, 정비 0건이었다 | **sleep** - 예약된 밤 작업이 정비와 망각을 한다 |
+| 기억 장치가 사람에게 확인을 구하면 쌓이기만 한다 - 해마가 "결정 필요" 로 남긴 질문이 4주 만에 279건이 됐고 답한 것은 없었다 | **hippocampus** 는 묻지 않는다. 기억 정리는 스스로 정하고, 코드 문제는 사실로 기억해 그 코드를 만지는 세션에 떠오르게 한다 |
 | 모델은 출처를 모르는 메시지를 따르지 않는다 - 명령형 훅 문구는 프롬프트 주입으로 의심받았고, `[기억]` 이 무엇인지 알려 주는 한 줄이 없으면 무시됐다 | 훅은 명령하지 않고 사실과 출처만 준다. 설치가 `CLAUDE.md` 에 그 한 줄을 넣는다 |
 
 설계 원칙:
@@ -86,6 +87,7 @@ Claude Code 로 오래 일하다 보면 반복되는 문제가 있다:
 - **기억은 사실과 출처만 준다.** 명령하지 않는다. 떠오른 기억은 판단 재료이고 판단은 세션이 한다. 지금 코드와 다르면 지금 코드가 기준이다.
 - **걸린 기억이 없으면 침묵한다.** 출력이 없으면 비용도 없다. 같은 기억은 세션에 한 번만 보인다(컨텍스트 압축 뒤에는 다시 보일 수 있다).
 - **세션이 하던 기억 관리를 세션 밖으로 옮긴다.** 대조도 기록도 훅과 밤 작업이 한다. 세션이 직접 기록하는 통로는 없다.
+- **무의식은 묻지 않는다.** hippocampus 는 사용자에게 질문이나 승인 대기를 남기지 않는다. 판단은 근거를 보고 스스로 하고, 되돌리기는 `_archive` 가 보장한다.
 - **고장은 작업을 막지 않는다.** 훅은 어떤 오류도 조용히 통과한다.
 - **강제는 파손 방지에만 둔다.** cortex 에 쓰는 주체는 hippocampus 하나이고, 하드 삭제는 없고, 기계가 읽는 형식은 지킨다.
 
@@ -109,7 +111,7 @@ Claude Code 로 오래 일하다 보면 반복되는 문제가 있다:
 
 Claude Code 가 세션마다 실시간으로 쓰는 대화록(`~/.claude/projects/<경로>/*.jsonl`)이 단기 기억 구실을 한다.
 replay.py 가 대화록별 처리 위치(바이트)를 `.active/replay-marks.json` 하나에 두고 깨어 있는 중 재생과 밤 재생이 함께 쓰므로, 같은 구간을 두 번 넘기지 않는다.
-hippocampus 의 결과는 세션에 전달되지 않는다. 실패한 항목 수와 사용자 판단 대기 건수가 `/brain` 상태에서 드러난다.
+hippocampus 의 결과는 세션에 전달되지 않는다. 실패한 항목 수가 `/claude-brain-status` 에서 드러난다.
 
 ### 떠올림 - thalamus
 
@@ -149,7 +151,7 @@ cortex/
 
 | | awake (깨어 있는 중) | sleep (잠) |
 |---|---|---|
-| 시작 | 턴 끝, 압축 직전, 세션 끝에 thalamus 가 백그라운드로 시작 | 매일 04:30 launchd. 놓치면 깨어난 뒤 한 번. `/brain sleep` 으로 지금 돌릴 수도 있다 |
+| 시작 | 턴 끝, 압축 직전, 세션 끝에 thalamus 가 백그라운드로 시작 | 매일 04:30 launchd. 놓치면 깨어난 뒤 한 번. `/claude-brain-sleep` 으로 지금 돌릴 수도 있다 |
 | 대상 | 지난 처리 위치 뒤에 새로 쌓인 대화록 구간 | 깨어 있는 중에 처리되지 못한 구간 |
 | 조건 | 새 구간이 4,000바이트 이상, 두드러짐 점수 6 이상(압축 직전과 세션 끝은 3 이상). 같은 대화록은 20분에 한 번(압축 직전과 세션 끝은 예외), 전체는 시간당 4건 | 두드러짐 점수 6 이상, 점수 높은 순 4건. 처음 보는 대화록은 최근 2일치만, 30분 안에 바뀐 대화록은 건너뜀 |
 | hippocampus | effort medium, 최대 120턴, 20분 | effort high, 최대 200턴, 30분 |
@@ -231,13 +233,14 @@ git clone https://github.com/FuJiGraphics/claude-brain.git ~/.claude/skills/brai
 bash ~/.claude/skills/brain/scripts/install.sh
 ```
 
-여러 번 돌려도 같은 결과다. 고치기 전 설정 파일은 `<파일>.brain-bak-<시각>` 으로 복사해 둔다(직전 사본과 같으면 새로 만들지 않는다). 설정 폴더는 `CLAUDE_CONFIG_DIR` 가 있으면 그것을 따른다. `settings.json` 이 JSON 으로 읽히지 않으면 아무것도 걸지 않고 멈춘다. 설치가 하는 일은 세 가지다.
+여러 번 돌려도 같은 결과다. 고치기 전 설정 파일은 `<파일>.brain-bak-<시각>` 으로 복사해 둔다(직전 사본과 같으면 새로 만들지 않는다). 설정 폴더는 `CLAUDE_CONFIG_DIR` 가 있으면 그것을 따른다. `settings.json` 이 JSON 으로 읽히지 않으면 아무것도 걸지 않고 멈춘다. 설치가 하는 일은 네 가지다.
 
 | 대상 | 하는 일 |
 |---|---|
 | `~/.claude/settings.json` | thalamus 훅 8종을 등록한다. 명령은 `python3 <brain>/scripts/thalamus.py hook` 이고 끝을 늘 종료 코드 0 으로 맺는다 - brain 폴더가 사라져도 도구 호출을 막지 않는다. 제한 시간은 5초, 파일 권한은 그대로 둔다. 이미 있는 다른 훅은 건드리지 않는다 |
 | `~/.claude/CLAUDE.md` | `<!-- brain:begin -->` 과 `<!-- brain:end -->` 사이에 한 줄을 넣는다(아래) |
 | macOS launchd | 매일 04:30 에 `scripts/sleep.sh` 를 부르는 `~/Library/LaunchAgents/com.brain.sleep.plist` 를 등록한다. `--no-sleep` 으로 건너뛴다. 등록이 끝내 실패하면 경고만 내고 훅과 기억 한 줄은 그대로 둔다 |
+| `~/.claude/commands/` | `/claude-brain-*` 명령어 파일 11개를 만든다(저장소 `commands/` 템플릿에 설치 경로를 채운 것). 자동완성에 하나씩 뜬다. 표식 줄이 있는 파일만 고치고 지우며, 같은 이름의 사용자 파일은 건드리지 않는다 |
 
 `CLAUDE.md` 에 들어가는 내용:
 
@@ -246,8 +249,8 @@ bash ~/.claude/skills/brain/scripts/install.sh
 이 한 줄이 없으면 모델이 `[기억]` 을 무시했다([실측](#실측)). 작동 원리는 적지 않는다.
 
 **프로젝트 등록.** 설치만으로는 어느 폴더에서도 기억이 떠오르지 않는다. thalamus 는 `cortex/registry.md` 에 등록된 프로젝트 안에서만 동작한다.
-등록은 밤 주기가 한다. 최근 7일 안에 대화록이 3개 이상이고 사용자 요청이 10개 이상인 `.git` 폴더 중 미등록인 곳을 한 번에 1곳씩 hippocampus 에 넘긴다. 스택과 버전은 프로젝트 파일에서 읽고, 모르는 칸은 `?` 로 두고 판단 대기에 올린다.
-설치 직후에는 `/brain sleep` 으로 바로 돌릴 수 있다.
+등록은 밤 주기가 한다. 최근 7일 안에 대화록이 3개 이상이고 사용자 요청이 10개 이상인 `.git` 폴더 중 미등록인 곳을 한 번에 1곳씩 hippocampus 에 넘긴다. 스택과 버전은 프로젝트 파일에서 읽고, 모르는 칸은 `?` 로 두고 뒤의 재생, 정비에서 확인되면 채운다.
+설치 직후에는 `/claude-brain-sleep` 으로 바로 돌릴 수 있다.
 
 **업데이트.**
 
@@ -286,9 +289,9 @@ echo acceptEdits > ~/.claude/skills/brain/scripts/hippocampus-perm.mode
 끄면 hippocampus 가 cortex 에 쓸 수 없어 항목이 `denied` 로 끝난다. 새 기억이 쌓이지 않을 뿐이고, 판정은 `scripts/hippocampus-ctl.sh results` 에 남으므로 보고 직접 반영할 수 있다. 떠올림, 검색, 망각은 그대로 돈다.
 다만 재생 요청은 계속 큐에 들어가 사용량만 쓰므로, 기억을 쌓지 않을 기기라면 `install.sh --uninstall` 이 낫다.
 
-항목마다 `claude -p` 를 한 번 띄운다. 모델과 effort 는 `/brain config` 로 고른다(default = Sonnet 5.5, effort high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high, 세부는 `/brain model`, `/brain effort`, 값은 `.active/config`). 모드별 턴,시간 상한이 있고 넘기면 자식을 죽이고 `timeout` 으로 기록한다. 사용 한도나 로그인 문제로 멈춘 항목은 실패로 끝내지 않고 큐로 되돌린다.
+항목마다 `claude -p` 를 한 번 띄운다. 모델과 effort 는 `/claude-brain-config` 로 고른다(default = Sonnet 5.5, effort high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high, 세부는 `/claude-brain-model`, `/claude-brain-effort`, 값은 `.active/config`). 모드별 턴,시간 상한이 있고 넘기면 자식을 죽이고 `timeout` 으로 기록한다. 사용 한도나 로그인 문제로 멈춘 항목은 실패로 끝내지 않고 큐로 되돌린다.
 
-`/brain off` 로 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 표시가 사라진다(기억은 남는다). `/brain on` 으로 다시 켠다. caveman 처럼 훅이 즉시 처리해 모델을 거치지 않는다. 설치는 원래 상태줄(예: caveman)을 그대로 두고 뒤에 `[BRAIN]` 을 붙인다.
+`/claude-brain-off` 로 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 표시가 사라진다(기억은 남는다). `/claude-brain-on` 으로 다시 켠다. caveman 처럼 훅이 즉시 처리해 모델을 거치지 않는다. 설치는 원래 상태줄(예: caveman)을 그대로 두고 뒤에 `[BRAIN]` 을 붙인다.
 
 | 모드 | effort | 최대 턴 | 벽시계 상한 |
 |---|---|---|---|
@@ -308,26 +311,29 @@ echo acceptEdits > ~/.claude/skills/brain/scripts/hippocampus-perm.mode
 
 ## 사용
 
-`/brain` 은 사용자가 직접 부를 때만 읽힌다(모델이 자동으로 호출하지 않는다). 기억이 떠오르고 기록되는 일은 이 명령 없이도 돈다.
+명령은 사용자가 직접 칠 때만 돈다(모델이 스스로 부르지 않는다). 기억이 떠오르고 기록되고 정리되는 일은 명령 없이 돈다.
+`/claude-brain-` 까지 치면 자동완성에 전체 명령이 뜬다. `/brain <명령>` 으로 쳐도 같다.
 
-| 입력 | 하는 일 |
-|---|---|
-| `/brain` 또는 `/brain status` | `status.sh` - 켜짐 여부와 해마 설정, hippocampus 큐와 실패 항목 수, 마지막 잠, 최근 24시간 떠올림 수와 주입 글자 수, 검사 결과, 판단 대기 건수 |
-| `/brain on`, `/brain off` | 켜기, 끄기. 훅이 즉시 처리한다(모델을 거치지 않는다). 끄면 상태줄의 `[BRAIN]` 이 사라진다 |
-| `/brain config [default\|eco\|quality]` | 해마 설정. 이름이 없으면 선택지로 묻는다 - default = Sonnet 5.5, high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high |
-| `/brain model <sonnet\|opus\|haiku>`, `/brain effort <low\|medium\|high\|xhigh\|max\|auto>` | 해마 모델, effort 를 따로 바꾼다. 훅이 즉시 처리한다 |
-| `/brain recall <이름>...` | `recall.sh` - 이름(파일, 심볼, API, 에러 문자열, 증상)으로 현재 폴더 프로젝트의 cortex 를 찾고 본문을 예산 안에서 함께 보여 준다 |
-| `/brain remember <내용>` | `remember.sh` - hippocampus 큐에 넣고 끝난다. 근거(file:line 이나 사용자 발화)를 함께 적어야 hippocampus 가 확인할 수 있다 |
-| `/brain sleep` | `sleep.sh` - 잠 주기를 지금 돌린다. 큐에 넣기만 하고 곧 끝나며, 처리는 hippocampus 가 뒤에서 한다 |
-| `/brain results` | `hippocampus-ctl.sh results` - hippocampus 가 처리한 항목의 판정. 본 것은 `--ack` |
-| `/brain pending` | `cortex/.pending.md` 에서 사용자가 정할 것만 묶어 질문하고, 답은 hippocampus 에 넘긴다 |
-| `/brain stop` | `hippocampus-ctl.sh stop` - 지금 항목이 끝나면 멈춘다 |
+| 명령 | 하는 일 | 처리 |
+|---|---|---|
+| `/claude-brain-status` | 켜짐 여부와 해마 설정, 해마 큐와 실패 항목 수, 마지막 잠, 검사 결과, 최근 24시간 떠올림 수와 주입 글자 수 | 즉시 |
+| `/claude-brain-on`, `/claude-brain-off` | 켜기, 끄기. 끄면 상태줄의 `[BRAIN]` 이 사라진다 | 즉시 |
+| `/claude-brain-config [default\|eco\|quality]` | 해마 설정. 값이 없으면 지금 설정을 보여 준다 - default = Sonnet 5.5, high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high | 즉시 |
+| `/claude-brain-model <sonnet\|opus\|haiku>` | 해마 모델 | 즉시 |
+| `/claude-brain-effort <low\|medium\|high\|xhigh\|max\|auto>` | 해마 effort | 즉시 |
+| `/claude-brain-stop` | 해마가 지금 항목을 끝내면 멈춘다 | 즉시 |
+| `/claude-brain-sleep` | 잠 주기를 지금 돌린다. 큐에 넣기만 하고 곧 끝나며, 처리는 hippocampus 가 뒤에서 한다 | 즉시 |
+| `/claude-brain-results` | 해마 결과 요약 - 상태별 건수, 실패 항목, 최근 5건 | 즉시 |
+| `/claude-brain-recall <이름>...` | 이름(파일, 심볼, API, 에러 문자열, 증상)으로 현재 폴더 프로젝트의 cortex 를 찾는다 | 모델 |
+| `/claude-brain-remember <내용>` | hippocampus 큐에 넣고 끝난다. 근거(file:line 이나 사용자 발화)는 모델이 대화에서 찾아 붙인다 | 모델 |
+
+"즉시" 는 훅(thalamus)이 입력을 받아 스크립트를 돌리고 결과를 바로 보여 주는 것이다. 모델을 거치지 않아 토큰을 쓰지 않는다. 명령어 파일에는 `disable-model-invocation: true` 가 있어 명령이 늘어도 매 세션 컨텍스트에 설명이 실리지 않는다.
 
 셸에서 직접 부를 때:
 
 ```bash
 scripts/hippocampus-ctl.sh status    # 데몬 상태, 큐 길이, 현재 항목
-scripts/hippocampus-ctl.sh results   # 처리 결과 열람
+scripts/hippocampus-ctl.sh results   # 처리 결과 열람 (--brief 는 요약, --ack 는 본 것 표시)
 scripts/hippocampus-ctl.sh log [id]  # 항목 로그
 scripts/hippocampus-ctl.sh stop      # 현재 항목이 끝나면 종료
 scripts/hippocampus-ctl.sh kill      # 자식 프로세스까지 즉시 종료
@@ -339,6 +345,7 @@ scripts/hippocampus-ctl.sh sweep [N] # 정비 조각 N개를 지금 큐에 넣�
 ```
 brain/
 ├── SKILL.md                   # /brain 제어판 - 사용자가 부를 때만 읽힌다
+├── commands/                  # /claude-brain-* 명령어 템플릿 - install.sh 가 설치 경로를 채워 ~/.claude/commands/ 에 만든다
 ├── BRAIN-DESIGN.md            # 설계 요약 (작업자용)
 ├── LICENSE                    # CC BY-ND 4.0
 ├── benchmarks/<날짜>/         # 벤치마크 원자료와 그래프
@@ -368,7 +375,6 @@ brain/
 │   ├── common/                #   스택 무관 (INDEX, harness-routing, glossary, search-aliases, lessons-index, lessons/, scripts/)
 │   ├── stacks/                #   스택별
 │   ├── projects/              #   프로젝트별
-│   ├── .pending.md            #   사용자 판단 대기 (hippocampus 가 만든다)
 │   └── .hippocampus/          #   큐, 잠금, 로그, 기억 강도, 잠 상태 (런타임, 추적 안 함)
 └── .active/                   # 세션별 떠올림 상태와 로그, 대화록 처리 위치 (런타임, 추적 안 함)
 ```
