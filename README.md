@@ -5,7 +5,7 @@
 새 기억은 대화록에서 만들어지고, 밤마다 정리된다.</p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-CC%20BY--ND%204.0-lightgrey.svg" alt="CC BY-ND 4.0 license"></a>
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-Skill-d97757?logo=anthropic&logoColor=white" alt="Claude Code skill"></a>
   <img src="https://img.shields.io/badge/lang-%ED%95%9C%EA%B5%AD%EC%96%B4-blue" alt="Korean">
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="platform">
@@ -13,7 +13,7 @@
 </p>
 
 ```bash
-git clone https://github.com/FuJiGraphics/brain.git ~/.claude/skills/brain
+git clone https://github.com/FuJiGraphics/claude-brain.git ~/.claude/skills/brain
 bash ~/.claude/skills/brain/scripts/install.sh
 ```
 
@@ -28,6 +28,8 @@ brain 은 Claude Code 를 위한 장기 기억 스킬이다. 세션에게 기억
 [기억] `PaymentClient` 에 대해 기억나는 것(과거에 확인한 사실이라 지금 코드와 다를 수 있다). 기억 저장소: ~/.claude/skills/brain/cortex
 - 결제 재시도는 멱등 키를 재사용한다 - 새로 만들면 이중 결제가 난다 (projects/shop/lessons/payment-retry-reuses-key.md)
 ```
+
+**목차** - [벤치마크](#벤치마크-2026-09-30) | [왜 필요한가](#왜-필요한가) | [어떻게 도는가](#어떻게-도는가) | [실측](#실측) | [설치](#설치) | [사용](#사용) | [폴더 구조](#폴더-구조) | [요구사항](#요구사항) | [n-worker 와의 관계](#n-worker-와의-관계) | [라이선스](#라이선스)
 
 ## 벤치마크 (2026-09-30)
 
@@ -225,7 +227,7 @@ cortex/
 ## 설치
 
 ```bash
-git clone https://github.com/FuJiGraphics/brain.git ~/.claude/skills/brain
+git clone https://github.com/FuJiGraphics/claude-brain.git ~/.claude/skills/brain
 bash ~/.claude/skills/brain/scripts/install.sh
 ```
 
@@ -246,6 +248,15 @@ bash ~/.claude/skills/brain/scripts/install.sh
 **프로젝트 등록.** 설치만으로는 어느 폴더에서도 기억이 떠오르지 않는다. thalamus 는 `cortex/registry.md` 에 등록된 프로젝트 안에서만 동작한다.
 등록은 밤 주기가 한다. 최근 7일 안에 대화록이 3개 이상이고 사용자 요청이 10개 이상인 `.git` 폴더 중 미등록인 곳을 한 번에 1곳씩 hippocampus 에 넘긴다. 스택과 버전은 프로젝트 파일에서 읽고, 모르는 칸은 `?` 로 두고 판단 대기에 올린다.
 설치 직후에는 `/brain sleep` 으로 바로 돌릴 수 있다.
+
+**업데이트.**
+
+```bash
+git -C ~/.claude/skills/brain pull
+bash ~/.claude/skills/brain/scripts/install.sh
+```
+
+누적 기억(cortex)은 `.gitignore` 로 추적에서 빠져 있어 pull 해도 그대로 남는다. 설치 스크립트는 여러 번 돌려도 같은 결과라 다시 돌려도 된다.
 
 **되돌리기.**
 
@@ -328,6 +339,9 @@ scripts/hippocampus-ctl.sh sweep [N] # 정비 조각 N개를 지금 큐에 넣�
 ```
 brain/
 ├── SKILL.md                   # /brain 제어판 - 사용자가 부를 때만 읽힌다
+├── BRAIN-DESIGN.md            # 설계 요약 (작업자용)
+├── LICENSE                    # CC BY-ND 4.0
+├── benchmarks/<날짜>/         # 벤치마크 원자료와 그래프
 ├── agents/
 │   └── hippocampus.md         # hippocampus 지침 (등록, 기록, 재생, 정비) - 데몬이 항목마다 읽힌다
 ├── scripts/
@@ -389,6 +403,15 @@ brain 은 [n-worker](https://github.com/FuJiGraphics/n-worker) 안에 있던 장
 
 레이어 구조(`registry.md`, `common/`, `stacks/`, `projects/`)는 옛 노트북과 같다. `cortex/common/search-aliases.md` 가 옛 이름으로 찾아도 새 이름이 걸리게 잇고, n-worker 의 `compat/` 스크립트가 옛 세션의 호출을 brain 으로 넘긴다.
 
-## License
+## 라이선스
 
-[MIT](LICENSE) - 수정과 재배포는 자유이며, 저작권 표시를 유지해 주세요.
+[CC BY-ND 4.0](LICENSE) (Creative Commons 저작자표시-변경금지 4.0 국제). Copyright (c) 2026 Cheol Jin Choi (FuJiGraphics).
+
+| 항목 | 내용 |
+|---|---|
+| 상업적 이용 | 가능 - 회사 업무, 유료 서비스 안에서 써도 된다 |
+| 공유, 재배포 | 가능 - 원본 그대로일 때만 |
+| 수정본 배포 | 불가 - 고치거나 일부를 떼어 낸 버전은 배포할 수 없다 |
+| 저작자 표기 | 필수 - 저작자, 저장소 주소(https://github.com/FuJiGraphics/claude-brain), 라이선스를 밝힌다 |
+
+수정본을 배포하려면 저작자에게 따로 허락을 받는다. 설치한 기기에서 쌓이는 cortex 기억은 사용자 본인의 것이며 이 라이선스와 무관하다.
