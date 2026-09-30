@@ -28,7 +28,7 @@ disable-model-invocation: true
 |---|---|---|
 | `status` (인자 없는 `/brain` 포함) | `bash <brain>/scripts/status.sh` - 켜짐, 해마 설정과 큐, 실패, 마지막 잠, 검사, 최근 떠올림 | 훅 |
 | `on`, `off` | `bash <brain>/scripts/config.sh on` 또는 `off`. 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 이 사라진다. 기억은 남는다 | 훅 |
-| `config [default\|eco\|quality]` | 값이 있으면 `config.sh preset <이름>`, 없으면 `config.sh show`. default = Sonnet 5.5 high, eco = Sonnet 5.5 medium, quality = Opus 5.5 high | 훅 |
+| `config [default\|eco\|quality]` | 값이 있으면 `config.sh preset <이름>`, 없으면 `config.sh show`. default = Sonnet 5.5 medium, eco = Sonnet 5.5 low, quality = Opus 5.5 high | 훅 |
 | `model <sonnet\|opus\|haiku>`, `effort <low\|medium\|high\|xhigh\|max\|auto>` | `config.sh model <이름>`, `config.sh effort <값>` | 훅 |
 | `stop` | `bash <brain>/scripts/hippocampus-ctl.sh stop` (지금 항목이 끝나면 멈춘다) | 훅 |
 | `sleep` | `bash <brain>/scripts/sleep.sh` - 투입만 하고 곧 끝난다. 처리는 해마가 뒤에서 한다 | 훅 |

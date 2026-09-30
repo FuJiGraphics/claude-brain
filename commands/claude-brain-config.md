@@ -1,5 +1,5 @@
 ---
-description: 해마 설정 - default(Sonnet high), eco(Sonnet medium), quality(Opus high). 값이 없으면 지금 설정
+description: 해마 설정 - default(Sonnet medium), eco(Sonnet low), quality(Opus high). 값이 없으면 지금 설정
 argument-hint: "[default|eco|quality]"
 disable-model-invocation: true
 ---

@@ -154,7 +154,7 @@ cortex/
 | 시작 | 턴 끝, 압축 직전, 세션 끝에 thalamus 가 백그라운드로 시작 | 매일 04:30 launchd. 놓치면 깨어난 뒤 한 번. `/claude-brain-sleep` 으로 지금 돌릴 수도 있다 |
 | 대상 | 지난 처리 위치 뒤에 새로 쌓인 대화록 구간 | 깨어 있는 중에 처리되지 못한 구간 |
 | 조건 | 새 구간이 4,000바이트 이상, 두드러짐 점수 6 이상(압축 직전과 세션 끝은 3 이상). 같은 대화록은 20분에 한 번(압축 직전과 세션 끝은 예외), 전체는 시간당 4건 | 두드러짐 점수 6 이상, 점수 높은 순 4건. 처음 보는 대화록은 최근 2일치만, 30분 안에 바뀐 대화록은 건너뜀 |
-| hippocampus | effort medium, 최대 120턴, 20분 | effort high, 최대 200턴, 30분 |
+| hippocampus | 최대 120턴, 20분 | 최대 200턴, 30분 |
 
 두드러짐 점수는 구간의 신호를 건마다 더한 값이다: 사용자의 정정 3점, 결정 표현 3점, 기억 요청 5점, 권한 거부 2점, 도구 실패 1점(합계 최대 5), 같은 대상을 6번 이상 읽거나 검색한 반복 조사 1점(합계 최대 3), 사용자 요청이 5개 이상이면 1점.
 요약 파일은 그 구간만 담고, hippocampus 가 요약에서 기록할 것만 골라 cortex 에 쓴다. 기록할 것이 없으면 아무것도 쓰지 않는다.
@@ -277,7 +277,7 @@ bash ~/.claude/skills/brain/scripts/install.sh --uninstall
 적용 범위와 제한:
 
 - **hippocampus 프로세스에만 적용된다.** 사용자의 대화 세션 권한은 그대로다.
-- 도구는 Read, Write, Edit, Grep, Glob, Bash 와 WebFetch, WebSearch, Skill 로 한정된다. MCP 서버는 붙이지 않는다.
+- 도구는 Read, Write, Edit, Grep, Glob, Bash 와 WebFetch, WebSearch 로 한정된다. MCP 서버와 스킬은 붙이지 않는다(`--strict-mcp-config`, `--disable-slash-commands`).
 - git 쓰기 명령(`commit`, `push`, `checkout`, `reset`, `switch`, `stash`, `rebase`, `merge`, `restore`, `clean`, `add`, `rm`, `mv`)과 `rm`, `sudo`, `find -delete` 는 거부 규칙으로 막는다. 같은 skills 폴더에 있는 모든 스킬의 본문(`SKILL.md`, `scripts/`, `agents/`, `references/` - 이 스킬과 n-worker 같은 이웃 스킬 모두)과 설정 폴더(`~/.claude/` 또는 `CLAUDE_CONFIG_DIR`)의 `settings.json`, `settings.local.json`, `CLAUDE.md`, `hooks/` 편집도 막는다. cortex 는 이 패턴에 걸리지 않는다. 거부 규칙은 이 모드에서도 유효하다(`Edit(경로)` 규칙이 Write 도구까지 막는 것을 실측으로 확인했다).
 - 그 밖의 경로에 쓰지 않는 것은 `agents/hippocampus.md` 의 규율이다. 프로젝트 폴더는 읽기만 하도록 지시해 넘기고(`--add-dir`), 쓰기 대상은 cortex 다. 기술적으로 강제하는 것은 위 거부 규칙뿐이다.
 - 그래도 이것은 **자기 기기에서 감독 없이 도는 에이전트**다. 그 전제가 불편하면 아래로 끈다.
@@ -289,17 +289,21 @@ echo acceptEdits > ~/.claude/skills/brain/scripts/hippocampus-perm.mode
 끄면 hippocampus 가 cortex 에 쓸 수 없어 항목이 `denied` 로 끝난다. 새 기억이 쌓이지 않을 뿐이고, 판정은 `scripts/hippocampus-ctl.sh results` 에 남으므로 보고 직접 반영할 수 있다. 떠올림, 검색, 망각은 그대로 돈다.
 다만 재생 요청은 계속 큐에 들어가 사용량만 쓰므로, 기억을 쌓지 않을 기기라면 `install.sh --uninstall` 이 낫다.
 
-항목마다 `claude -p` 를 한 번 띄운다. 모델과 effort 는 `/claude-brain-config` 로 고른다(default = Sonnet 5.5, effort high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high, 세부는 `/claude-brain-model`, `/claude-brain-effort`, 값은 `.active/config`). 모드별 턴,시간 상한이 있고 넘기면 자식을 죽이고 `timeout` 으로 기록한다. 사용 한도나 로그인 문제로 멈춘 항목은 실패로 끝내지 않고 큐로 되돌린다.
+항목마다 `claude -p` 를 한 번 띄운다. 모델과 effort 는 `/claude-brain-config` 로 고른다(default = Sonnet 5.5, effort medium / eco = Sonnet 5.5, low / quality = Opus 5.5, high, 세부는 `/claude-brain-model`, `/claude-brain-effort`, 값은 `.active/config`). 모드별 턴,시간 상한이 있고 넘기면 자식을 죽이고 `timeout` 으로 기록한다. 사용 한도나 로그인 문제로 멈춘 항목은 실패로 끝내지 않고 큐로 되돌린다.
 
 `/claude-brain-off` 로 끄면 떠올림, 조사 한 줄, 재생, 밤 잠이 멈추고 상태줄의 `[BRAIN]` 표시가 사라진다(기억은 남는다). `/claude-brain-on` 으로 다시 켠다. caveman 처럼 훅이 즉시 처리해 모델을 거치지 않는다. 설치는 원래 상태줄(예: caveman)을 그대로 두고 뒤에 `[BRAIN]` 을 붙인다.
 
-| 모드 | effort | 최대 턴 | 벽시계 상한 |
+| 모드 | 최대 턴 | 벽시계 상한 | effort 가 `auto` 일 때 |
 |---|---|---|---|
-| register, harness-refresh | medium | 120 | 15분 |
-| record | medium | 200 | 30분 |
-| replay (awake) | medium | 120 | 20분 |
-| replay (sleep) | high | 200 | 30분 |
-| sweep, targeted | high | 400 | 40분 |
+| register, harness-refresh | 120 | 15분 | medium |
+| record | 200 | 30분 | medium |
+| replay (awake) | 120 | 20분 | medium |
+| replay (sleep) | 200 | 30분 | high |
+| sweep, targeted | 400 | 40분 | high |
+
+effort 는 설정값(기본 medium)이 모든 모드에 쓰이고, `/claude-brain-effort auto` 일 때만 위 표의 모드별 값을 쓴다. 2026-09-30 실측에서 medium 은 high 대비 턴이 절반이었고 격리 시험 3건의 품질 차이는 없었다.
+
+**토큰 절약.** 에이전트는 턴마다 그때까지의 대화 전체를 다시 읽으므로 사용량은 대략 턴 수 x 평균 컨텍스트다. 그래서 해마는 (1) 지침 `agents/hippocampus.md` 에서 이번 모드에 필요한 절만 시스템 프롬프트에 싣고(`scripts/hippocampus-brief.py`), (2) 스킬 목록을 싣지 않고(`--disable-slash-commands`), (3) 넓은 grep 은 파일 목록으로 먼저 좁히고 무관한 조회는 한 턴에 묶는다.
 
 - 데몬은 세션과 독립된 프로세스이고 잠금 디렉터리로 단일 실행을 보장한다. 큐가 비면 스스로 종료한다.
 - `claude` 가 20초 안에 비정상 종료하면(플래그, 로그인 문제) 큐를 태우지 않고 데몬이 멈춘다. 처리 중 죽으면 다음 기동 때 그 항목을 한 번만 다시 돌린다.
@@ -318,7 +322,7 @@ echo acceptEdits > ~/.claude/skills/brain/scripts/hippocampus-perm.mode
 |---|---|---|
 | `/claude-brain-status` | 켜짐 여부와 해마 설정, 해마 큐와 실패 항목 수, 마지막 잠, 검사 결과, 최근 24시간 떠올림 수와 주입 글자 수 | 즉시 |
 | `/claude-brain-on`, `/claude-brain-off` | 켜기, 끄기. 끄면 상태줄의 `[BRAIN]` 이 사라진다 | 즉시 |
-| `/claude-brain-config [default\|eco\|quality]` | 해마 설정. 값이 없으면 지금 설정을 보여 준다 - default = Sonnet 5.5, high / eco = Sonnet 5.5, medium / quality = Opus 5.5, high | 즉시 |
+| `/claude-brain-config [default\|eco\|quality]` | 해마 설정. 값이 없으면 지금 설정을 보여 준다 - default = Sonnet 5.5, medium / eco = Sonnet 5.5, low / quality = Opus 5.5, high | 즉시 |
 | `/claude-brain-model <sonnet\|opus\|haiku>` | 해마 모델 | 즉시 |
 | `/claude-brain-effort <low\|medium\|high\|xhigh\|max\|auto>` | 해마 effort | 즉시 |
 | `/claude-brain-stop` | 해마가 지금 항목을 끝내면 멈춘다 | 즉시 |
@@ -363,6 +367,7 @@ brain/
 │   ├── hippocampus-enqueue.sh # 요청을 큐에 넣고 데몬이 없으면 띄운다
 │   ├── hippocampus-ctl.sh     # 데몬 상태, 결과 열람, 중지, 정비 투입
 │   ├── hippocampus-perm.mode  # hippocampus 의 권한 모드 (한 단어)
+│   ├── hippocampus-brief.py   # 지침에서 이번 모드에 필요한 절만 뽑는다 (데몬이 시스템 프롬프트로 싣는다)
 │   ├── sleep.sh               # 밤 주기 (강도 집계, 망각, 재생, 실패 학습, 정비, 검사)
 │   ├── sleep-stats.py         # 기억 강도와 검색 실패 집계
 │   ├── forget.py              # 망각과 되살림
