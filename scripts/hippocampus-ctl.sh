@@ -1,6 +1,7 @@
 #!/bin/bash
 # brain hippocampus 데몬 제어. 어느 세션에서든 쓴다.
-# 사용법: hippocampus-ctl.sh status | stop | kill | results [--ack] | log [id] | sweep [N]
+# 사용법: hippocampus-ctl.sh status | stop | kill | results [--ack|--brief] | log [id] | sweep [N]
+#   results --brief: 상태별 건수, 실패 항목, 최근 5건의 첫 줄만(훅이 /claude-brain-results 로 바로 보여 준다)
 set -u
 SKILL="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$SKILL"
@@ -36,6 +37,25 @@ case "$cmd" in
     nw_py - "$C/done" "${2:-}" <<'PY'
 import json, sys, glob, os
 d, ack = sys.argv[1], sys.argv[2] == "--ack"
+if sys.argv[2] == "--brief":
+    import collections
+    rows = []
+    for p in sorted(glob.glob(os.path.join(d, "*.json"))):
+        if p.endswith(".request.json"): continue
+        try: r = json.load(open(p, encoding='utf-8'))
+        except Exception: continue
+        first = next((l for l in (r.get("summary") or "").splitlines() if l.strip()), "")
+        rows.append((r.get("id") or os.path.basename(p), r.get("status") or "?", (r.get("finished_at") or "")[:16], first[:120]))
+    c = collections.Counter(x[1] for x in rows)
+    print("해마 결과 %d건: %s" % (len(rows), ", ".join("%s %d" % kv for kv in c.most_common())))
+    bad = [x for x in rows if x[1] in ("failed", "denied", "timeout")]
+    if bad:
+        print("실패,거부,시간 초과:")
+        for x in bad[-10:]: print("- %s %s [%s] %s" % (x[2], x[0][:60], x[1], x[3]))
+    print("최근:")
+    for x in rows[-5:]: print("- %s [%s] %s" % (x[2], x[1], x[3]))
+    print("전체: bash %s results" % os.path.normpath(os.path.join(os.path.abspath(d), "..", "..", "..", "scripts", "hippocampus-ctl.sh")))
+    sys.exit(0)
 for p in sorted(glob.glob(os.path.join(d, "*.json"))):
     if p.endswith(".request.json"): continue
     try: r = json.load(open(p, encoding='utf-8'))
@@ -55,5 +75,5 @@ PY
     for r in "$tmp"/req-*.json; do [ -f "$r" ] && bash "$SKILL/scripts/hippocampus-enqueue.sh" "$r" | head -1; done
     ;;
   log) id="${2:-}"; if [ -n "$id" ]; then tail -40 "$C/logs/$id.log"; else tail -20 "$C/logs/daemon.out" 2>/dev/null; fi;;
-  *) echo "사용법: hippocampus-ctl.sh status | stop | kill | results [--ack] | log [id] | sweep [N]";;
+  *) echo "사용법: hippocampus-ctl.sh status | stop | kill | results [--ack|--brief] | log [id] | sweep [N]";;
 esac

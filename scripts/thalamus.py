@@ -594,23 +594,66 @@ HABIT = ('[기억] 계획을 세우기 전에, 세션 시작 때 떠오른 기�
          '이름을 모르는 함정은 색인에서만 발견된다.')
 
 
-CONTROL_RE = re.compile(r'^/brain(?::brain)?\s+(on|off|config\s+(default|eco|quality)|model\s+(sonnet|opus|haiku)|effort\s+(low|medium|high|xhigh|max|auto))\s*$', re.I)
+CONTROL_RE = re.compile(r'^/(?:brain(?::brain)?(?:\s+(?P<a>.*))?|claude-brain-(?P<b>[a-z]+)(?:\s+(?P<c>.*))?)$', re.I | re.S)
+PRESETS = ('default', 'eco', 'quality')
+MODELS = ('sonnet', 'opus', 'haiku')
+EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max', 'auto')
+
+
+def _run(args, timeout=4):
+    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    return (p.stdout or p.stderr).strip()
 
 
 def control(prompt):
-    """[/brain on, off, config <preset>, model <name>, effort <level>] - 설정만 바꾸고 결과 두 줄을 돌려준다. 그 밖의 말이면 None
-    - '/brain config' 처럼 값이 없으면 None 이라 스킬이 선택지를 묻는다
+    """[/claude-brain-<명령> 또는 /brain <명령>] - 스크립트만 돌리면 되는 명령을 훅이 바로 처리하고 결과 글을 돌려준다. 그 밖이면 None
+    - 바로 처리: status(인자 없는 /brain 포함), on, off, config [프리셋], model <이름>, effort <값>, stop, sleep, results
+    - None(모델이 처리): recall, remember, 모르는 명령 - 명령 파일이나 SKILL.md 가 받는다
     """
     m = CONTROL_RE.match(prompt.strip())
     if not m:
         return None
-    w = m.group(1).lower().split()
-    args = {'on': ['on'], 'off': ['off'], 'config': ['preset']}.get(w[0], [w[0]]) + w[1:]
+    if m.group('b') is not None:
+        w = [m.group('b').lower()] + (m.group('c') or '').lower().split()
+    else:
+        w = (m.group('a') or '').lower().split() or ['status']
+    cmd, args = w[0], w[1:]
+    cfg = ['bash', os.path.join(HERE, 'config.sh')]
+    ctl = ['bash', os.path.join(HERE, 'hippocampus-ctl.sh')]
     try:
-        p = subprocess.run(['bash', os.path.join(HERE, 'config.sh')] + args, capture_output=True, text=True, timeout=4)
-        return (p.stdout or p.stderr).strip() or 'brain 설정을 바꿨다'
+        if cmd == 'status' and not args:
+            return _run(['bash', os.path.join(HERE, 'status.sh')])
+        if cmd in ('on', 'off') and not args:
+            return _run(cfg + [cmd]) or 'brain 설정을 바꿨다'
+        if cmd == 'config':
+            if not args:
+                return _run(cfg + ['show']) + '\n바꾸기: /claude-brain-config default | eco | quality'
+            if len(args) == 1 and args[0] in PRESETS:
+                return _run(cfg + ['preset', args[0]]) or 'brain 설정을 바꿨다'
+            return '사용법: /claude-brain-config [default | eco | quality]'
+        if cmd == 'model':
+            if len(args) == 1 and args[0] in MODELS:
+                return _run(cfg + ['model', args[0]]) or 'brain 설정을 바꿨다'
+            return '사용법: /claude-brain-model sonnet | opus | haiku'
+        if cmd == 'effort':
+            if len(args) == 1 and args[0] in EFFORTS:
+                return _run(cfg + ['effort', args[0]]) or 'brain 설정을 바꿨다'
+            return '사용법: /claude-brain-effort low | medium | high | xhigh | max | auto'
+        if cmd == 'stop' and not args:
+            return _run(ctl + ['stop']) or '해마: 지금 항목이 끝나면 멈춘다'
+        if cmd == 'results' and not args:
+            return _run(ctl + ['results', '--brief'])
+        if cmd == 'sleep' and not args:
+            # 잠 주기는 몇 초를 넘길 수 있어 훅 제한 시간(5초) 안에 기다리지 않는다 - 세션과 무관한 프로세스로 띄우고 바로 돌아온다
+            lg = os.path.join(CX, '.hippocampus', 'logs')
+            os.makedirs(lg, exist_ok=True)
+            with open(os.path.join(lg, 'sleep-manual.out'), 'a') as out:
+                subprocess.Popen(['bash', os.path.join(HERE, 'sleep.sh')], stdin=subprocess.DEVNULL, stdout=out,
+                                 stderr=subprocess.STDOUT, cwd=BRAIN, start_new_session=True)
+            return '잠 주기를 시작했다 - 투입만 하고 곧 끝나며 처리는 해마가 뒤에서 한다. 결과: /claude-brain-status'
     except Exception as e:
-        return 'brain 설정을 바꾸지 못했다: %s' % e.__class__.__name__
+        return 'brain 명령을 처리하지 못했다: %s' % e.__class__.__name__
+    return None
 
 
 def enabled():

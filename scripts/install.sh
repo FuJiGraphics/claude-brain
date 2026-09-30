@@ -1,10 +1,11 @@
 #!/bin/bash
-# brain 설치 - 이 폴더(설치 위치, 보통 ~/.claude/skills/brain)를 기준으로 세 가지를 건다. 여러 번 돌려도 같은 결과다.
+# brain 설치 - 이 폴더(설치 위치, 보통 ~/.claude/skills/brain)를 기준으로 네 가지를 건다. 여러 번 돌려도 같은 결과다.
 #   1. ~/.claude/settings.json 에 thalamus 훅(SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart,
 #      Stop, PreCompact, SessionEnd). 이 스크립트가 건 항목은 명령에 scripts/thalamus.py 가 든 것으로 알아본다.
 #   2. ~/.claude/CLAUDE.md 에 기억 소유 한 줄 - 모델은 이 줄이 있어야 [기억] 을 자기 기억으로 믿고 쓴다(없으면 출처 불명
 #      삽입으로 보고 무시했다, 2026-09-29 실측). 작동 원리는 적지 않는다.
 #   3. macOS 면 launchd 로 매일 04:30 잠(scripts/sleep.sh). 다른 OS 는 cron 등으로 sleep.sh 를 하루 한 번 부르면 된다.
+#   4. <설정 폴더>/commands/ 에 /claude-brain-* 명령어 파일(commands/ 템플릿에 설치 경로를 채운 것).
 # 사용법: bash scripts/install.sh [--uninstall] [--no-sleep]
 # 고치기 전 설정 파일은 <파일>.brain-bak-<시각> 으로 남긴다(직전 백업과 내용이 같으면 새로 만들지 않는다).
 # 훅 등록이 실패하면(settings.json 이 JSON 이 아님 등) 나머지를 걸지 않고 종료 코드 1 로 멈춘다 - 반쪽 설치를 남기지 않는다.
@@ -121,6 +122,34 @@ if mode == 'install':
           '지금 코드와 다르면 지금 코드가 기준이다.\n' + end + '\n')
 open(path, 'w', encoding='utf-8').write(s)
 print('기억 소유 한 줄: %s (%s)' % ('추가' if mode == 'install' else '제거', path))
+PY
+
+# 2b. 명령어 - <설정 폴더>/commands/claude-brain-*.md. 저장소 commands/ 템플릿의 {{BRAIN}} 을 이 설치 경로로 채워 만든다.
+# 자동완성에 /claude-brain-status 처럼 하나씩 뜬다. 표식 줄(brain:command)이 있는 파일만 이 스크립트 것으로 보고 고치거나 지운다.
+nw_py - "$BRAIN/commands" "$CFG/commands" "$BRAIN" "$MODE" <<'PY' || echo "경고: 명령어 파일을 만들지 못했다 - 훅과 기억은 정상"
+import glob, os, sys
+src, dst, brain, mode = sys.argv[1:5]
+MARK = '<!-- brain:command'
+mine = lambda f: MARK in open(f, encoding='utf-8').read()
+want = {}
+if mode == 'install':
+    for t in sorted(glob.glob(os.path.join(src, 'claude-brain-*.md'))):
+        want[os.path.basename(t)] = open(t, encoding='utf-8').read().replace('{{BRAIN}}', brain)
+    os.makedirs(dst, exist_ok=True)
+n_add = n_del = 0
+for f in glob.glob(os.path.join(dst, 'claude-brain-*.md')):
+    if os.path.basename(f) not in want and mine(f):
+        os.remove(f); n_del += 1
+for name, text in want.items():
+    f = os.path.join(dst, name)
+    if os.path.exists(f) and not mine(f):
+        print('건너뜀: %s 는 사용자 파일이다' % f); continue
+    if not os.path.exists(f) or open(f, encoding='utf-8').read() != text:
+        open(f, 'w', encoding='utf-8').write(text); n_add += 1
+if mode == 'install':
+    print('명령어: /claude-brain-* %d개 (%s, 새로 쓴 것 %d, 지운 것 %d)' % (len(want), dst, n_add, n_del))
+else:
+    print('명령어: /claude-brain-* %d개 제거' % n_del)
 PY
 
 # 3. 밤 잠 예약 (macOS)
