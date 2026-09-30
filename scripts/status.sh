@@ -27,5 +27,3 @@ print('== 최근 24시간 떠올림: %s, 세션 %d, 주입 %d자' % (', '.join('
 PY
 fi
 [ -f "$C/sleep/notice-harness.txt" ] && echo "== $(cat "$C/sleep/notice-harness.txt") - 도구 동작이 실제로 깨졌을 때만 hippocampus harness-refresh 를 넣는다"
-n="$(grep -c '^- ' "$BRAIN/cortex/.pending.md" 2>/dev/null)"; n="${n:-0}"   # 0건이면 grep -c 가 0 을 찍고 1 로 끝난다 - || echo 0 을 붙이면 두 줄이 된다
-echo "== 사용자 판단 대기: ${n}건 ($BRAIN/cortex/.pending.md)"

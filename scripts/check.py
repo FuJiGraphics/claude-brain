@@ -5,13 +5,13 @@
   종료 코드 0 = 파손,인출 불가 없음, 1 = 있음, 2 = 사용법 오류(--nb 가 cortex 가 아님, --layer 가 없는 레이어이거나 값이 없음).
   참고 항목(줄 길이, 크기, 금지 문자, 단계 카드 세부 형식, 잠재 기억 개수)은 판단 재료라 종료 코드에 넣지 않는다.
   --layer 는 형식,참고 항목을 보여 줄 범위만 좁힌다. 죽은 링크와 주 인덱스 줄(떠오르지 않는 lesson) 검사는
-  옮기기,승격,아카이브가 다른 레이어와 .pending.md 의 링크까지 죽이므로 늘 cortex 전체를 본다.
+  옮기기,승격,아카이브가 다른 레이어의 링크까지 죽이므로 늘 cortex 전체를 본다.
 
 검사: 죽은 링크(cortex 밖으로 나가는 링크, refs/ 원문, 코드 안 링크는 제외), 검색 대상 인덱스에 주 줄이 없는 lesson(recall.sh 로 열 수 없음.
       단 레이어 루트 dormant.md 의 줄이 첫 링크로 가리키는 lesson 은 forget.py 가 숨긴 잠재 기억이라 세지 않고 정보 줄로만 알린다),
       경로 고정 파일 존재, 400자 넘는 인덱스 줄, 인덱스 임계(항목 = 서로 다른 첫 링크 60, 200줄, 10,000자),
       금지 문자(코드,인용,외부 문서 원문 제외), 스크립트 등록 4요소, 레이어 INDEX 크기(목표 3,000자, projects 는 thalamus 가 세션 시작에 싣는 상한 2,500자 - 정보),
-      전역 형식(registry 표와 슬러그,스택 폴더, .pending 줄, harness-routing 번호,절, 단계 카드의 INDEX 링크와 세부 형식).
+      전역 형식(registry 표와 슬러그,스택 폴더, harness-routing 번호,절, 단계 카드의 INDEX 링크와 세부 형식).
 """
 import os, re, sys, collections
 
@@ -27,7 +27,7 @@ DORMANT_RE = re.compile(r'(common|(projects|stacks)/[^/]+)/dormant[.]md')
 NO_PRIMARY = '주 인덱스 줄 없음 - recall.sh 로 열 수 없음(§0)'
 # 스크립트가 경로로 여는 파일 - 새로 설치한 시드에도 있어야 한다. 기기에서 자란 lesson 은 넣지 않는다(시드에 없어 새 설치가 늘 '파손'으로 보였다)
 FIXED_FILES = (
-    'registry.md', '.pending.md',
+    'registry.md',
     'common/harness-routing.md', 'common/glossary.md', 'common/search-aliases.md',
 )
 
@@ -216,11 +216,6 @@ def main():
         for need in FIXED_FILES:
             if need not in files:
                 P['경로 고정 파일 없음'].append(need)
-        pend = texts.get('.pending.md', '')
-        bad = [l for l in pend.splitlines() if l.startswith('- ') and not re.match(r'^- [0-9]{4}-[0-9]{2}-[0-9]{2} ', l)]
-        if bad:
-            P['.pending.md 항목 형식'].extend(x[:80] for x in bad[:20])
-        info.append('.pending.md 대기 %d건' % sum(1 for l in pend.splitlines() if l.startswith('- ')))
         hr = texts.get('common/harness-routing.md', '')
         m = re.search(r'^checked_version:[ \t]*(\S+)[ \t]*$', hr, re.M)
         if not m or not re.fullmatch(r'claude-code_\S+', m.group(1)):
@@ -234,7 +229,7 @@ def main():
                 P['harness-routing 절 누락'].append(sec)
     # 단계 카드의 제목,트리거 줄 형식은 스크립트가 읽지 않고 세션의 모델이 읽으므로 참고로 둔다. 카드 파일 존재(죽은 링크)와 INDEX 링크만 파손이다.
     LEVEL = {
-        '파손': ('registry 형식', '.pending.md 항목 형식', '경로 고정 파일 없음', 'registry 슬러그 폴더 없음', 'registry 스택 폴더 없음', 'harness-routing checked_version 형식', 'harness-routing 표 번호 누락', 'harness-routing 절 누락', '레이어 INDEX 에 카드 줄 없음'),
+        '파손': ('registry 형식', '경로 고정 파일 없음', 'registry 슬러그 폴더 없음', 'registry 스택 폴더 없음', 'harness-routing checked_version 형식', 'harness-routing 표 번호 누락', 'harness-routing 절 누락', '레이어 INDEX 에 카드 줄 없음'),
         '인출 불가': ('죽은 링크', NO_PRIMARY),
     }
     lv = lambda k: next((n for n, ks in LEVEL.items() if k in ks), '참고')

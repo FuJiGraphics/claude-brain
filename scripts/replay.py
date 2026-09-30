@@ -513,7 +513,7 @@ def scan(a):
         req = {'mode': 'register', 'project_root': top, 'slug': re.sub(r'[^a-z0-9-]', '-', os.path.basename(top).lower()).strip('-'),
                'stack': '?', 'caller': 'brain-sleep',
                'payload': {'auto': True, 'reason': '최근 7일 대화록 %d개, 사람 요청 %d개 - 자주 일하는 곳이라 기억 자리를 만든다' % (s, pr),
-                           'instruction': '스택과 버전, 컨벤션 문서 위치는 프로젝트 파일(ProjectSettings/ProjectVersion.txt, package.json, CLAUDE.md 등)에서 확인한다. 확인이 안 되는 칸은 ? 로 두고 .pending.md 에 한 줄 남긴다.'}}
+                           'instruction': '스택과 버전, 컨벤션 문서 위치는 프로젝트 파일(ProjectSettings/ProjectVersion.txt, package.json, CLAUDE.md 등)에서 확인한다. 확인이 안 되는 칸은 ? 로 둔다.'}}
         rp = os.path.join(out_reqs, 'register-%s.json' % req['slug'][:30])
         with open(rp, 'w', encoding='utf-8') as f:
             json.dump(req, f, ensure_ascii=False, indent=1)

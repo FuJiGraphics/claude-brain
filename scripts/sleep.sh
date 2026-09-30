@@ -81,15 +81,8 @@ HV="$(claude --version 2>/dev/null | head -1 | sed -n 's/^\([0-9][0-9.]*\).*/\1/
 CV="$(sed -n 's/^checked_version:[[:space:]]*claude-code_\([0-9-]*\)_agent.*/\1/p' "$CX/common/harness-routing.md" 2>/dev/null | head -1)"
 if [ -n "$HV" ] && [ -n "$CV" ] && [ "$HV" != "$CV" ]; then echo "하네스 버전 변경: 기록 $CV, 현재 $HV" > "$S/notice-harness.txt"; else rm -f "$S/notice-harness.txt"; fi
 fails="$(find "$C/done" -name '*.json' ! -name '*.request.json' -mtime -1 -exec grep -l '"status": *"\(failed\|denied\|timeout\)"' {} + 2>/dev/null | wc -l | tr -d ' ')"
-# grep -c 는 0건이면 "0" 을 찍고 1 로 끝난다 - `|| echo 0` 을 붙이면 "0\n0" 이 되어 숫자 비교가 깨진다
-npend="$(grep -c '^- ' "$CX/.pending.md" 2>/dev/null)"; npend="${npend:-0}"
-# 첫 잠(기준 파일 없음)은 지금 건수를 기준으로 삼고 알리지 않는다 - 원래 있던 대기 전부를 '늘었다' 로 알리지 않게
-if [ -f "$S/pending-count" ]; then lastp="$(cat "$S/pending-count" 2>/dev/null)"; else lastp="$npend"; fi
-case "$lastp" in ""|*[!0-9]*) lastp="$npend";; esac
-[ "$DRY" = 1 ] || echo "$npend" > "$S/pending-count"
 msg=""
 [ "${fails:-0}" -gt 0 ] && msg="해마 실패,거부 ${fails}건"
-[ "$npend" -gt "$lastp" ] && msg="${msg:+$msg, }판단 대기 $((npend - lastp))건 늘어 ${npend}건"
 if [ "$DRY" = 0 ]; then echo "$(date '+%F %T') ${msg:-이상 없음}" > "$S/last-summary.txt"; fi
 [ -n "$msg" ] && echo "요약: $msg"
 echo "== 끝 $(date '+%T')"

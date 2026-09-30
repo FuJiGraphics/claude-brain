@@ -8,7 +8,7 @@ n-worker 는 오케스트레이션(인터뷰, 플랜, 생산, 검증, 보고)만
 
 | 옛 이름 | 새 이름 | 뇌 기능 | 파일 |
 |---|---|---|---|
-| 노트북 (notebook/) | cortex (기억 저장소) | 대뇌 피질: 굳어진 장기 기억 | `<brain>/cortex/` (registry.md, .pending.md, common/, stacks/, projects/) |
+| 노트북 (notebook/) | cortex (기억 저장소) | 대뇌 피질: 굳어진 장기 기억 | `<brain>/cortex/` (registry.md, common/, stacks/, projects/) |
 | curator | hippocampus | 해마: 새 기억 형성, 되짚어 피질로 옮기며 정리 | `agents/hippocampus.md`, `scripts/hippocampus-{daemon,enqueue,ctl}.sh`, 큐 `cortex/.hippocampus/{queue,processing,done,logs}` |
 | (없음) nb-gate 대신 | thalamus | 시상: 감각을 걸러 의식으로 올리고, 깨어남 조절 | `scripts/thalamus.py` (훅) |
 | nb-grep.sh | recall.sh | 의식적 떠올리기(사용자 /brain 과 hippocampus 가 씀. 세션은 모른다) | `scripts/recall.sh` + 엔진 `scripts/nbsearch.py` |
@@ -26,7 +26,7 @@ n-worker 는 오케스트레이션(인터뷰, 플랜, 생산, 검증, 보고)만
   - Stop(턴 끝), PreCompact(압축 직전), SessionEnd: 새로 쌓인 대화록 구간이 두드러지면 `replay.py awake` 를 백그라운드로 띄운다 → hippocampus `replay` 요청(payload.kind = "awake").
 - **대화록 = 단기 기억 버퍼**. 처리 위치는 `<brain>/.active/replay-marks.json`(대화록별 바이트) 하나를 깨어 있는 중 재생과 밤 재생이 같이 쓴다. 같은 구간을 두 번 넘기지 않는다.
 - **replay 요청 payload**: `{kind: "awake"|"sleep", digest: <요약 파일>, session, transcript, score, bytes: [시작, 끝]}`. 요약은 그 구간만 담고, 구간이 중간부터면 "세션 첫 요청(맥락)" 한 줄이 있다. awake 는 effort medium, sleep 은 high.
-- **register 자동 제안**: 밤에 최근 7일 대화록 3개 이상, 사람 요청 10개 이상인 미등록 git 폴더 1곳을 `register` 로 넣는다(payload.auto = true, reason, instruction). 스택,버전,컨벤션 문서는 프로젝트 파일에서 확인하고 모르면 `?` 로 두고 .pending.md 에 한 줄.
+- **register 자동 제안**: 밤에 최근 7일 대화록 3개 이상, 사람 요청 10개 이상인 미등록 git 폴더 1곳을 `register` 로 넣는다(payload.auto = true, reason, instruction). 스택,버전,컨벤션 문서는 프로젝트 파일에서 확인하고 모르면 `?` 로 둔다(해마는 사용자에게 묻지 않는다).
 - **망각(forget.py, 밤)**: 기억 = 검색 대상 인덱스 줄의 첫 링크가 가리키는 본문. 마지막 사용일(떠올림,열람,검색 히트 = `cortex/.hippocampus/strength.json` 의 last, 본문 수정일, brain 설치일 중 가장 늦은 날)에서 45일(두드러진 기억 - 본문에 사용자 결정, 함정, 사고, 손실, 파괴 - 은 120일) 지나면 그 인덱스 줄을 `<레이어>/dormant.md` 로 옮긴다(줄 끝 `<!-- dormant <원래 파일> <날짜> -->`). 본문은 남는다. dormant.md 는 이름에 index 가 없어 자동 떠올림에 안 걸리고 recall.sh 본문 대체 검색으로는 찾힌다(잠재 기억). 숨긴 뒤 다시 쓰이면 원래 인덱스로 돌아간다. **hippocampus 는 dormant.md 를 손으로 고치지 않는다**(forget.py 소유) - 단 정비에서 dormant 기억 본문을 읽고 병합,아카이브 판단은 할 수 있다.
 - **기억 강도(strength.json)**: `{generated, memories: {상대 경로: {shown, opened, grepped, last}}}`. 망각과 thalamus 순위(최근 14일 사용 +2, 45일 +1)가 쓴다. 정비의 판단 재료이고, 강도가 낮다고 지우는 근거는 아니다.
 - **sleep.sh 순서**: 강도 집계 → 망각(데몬이 쉴 때만) → 재생 scan → 검색 실패 학습(targeted) → 조각 정비(sweep, payload.slice) → 검사. launchd 매일 04:30.
