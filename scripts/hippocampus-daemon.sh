@@ -32,6 +32,20 @@ skill_n="$(nw_tool_path "$SKILL")"; nb_n="$(nw_tool_path "$NB")"; cur_n="$(nw_to
 CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; CFG="${CFG%/}"; [ -d "$CFG" ] && CFG="$(cd "$CFG" && pwd)"   # 끝 슬래시,상대경로 정리 - 규칙이 문자열로 맞아야 한다
 cfg_n="$(nw_tool_path "$CFG")"   # 설정 폴더 - 거부 규칙이 이 경로의 설정,훅을 지킨다
 skills_n="$(dirname "$skill_n")"   # brain 이 든 skills 폴더 - 모든 스킬의 본문(SKILL.md, scripts, references, agents)을 지킨다. cortex 는 brain/cortex 라 걸리지 않는다
+# 사용자 설정에서 켜진 플러그인(훅, 스킬, 주입 문구)은 해마 세션에서만 끈다. 해마는 플러그인을 쓰지 않는데 그 문구가 턴마다 다시 읽힌다
+# (2026-09-30 실측: caveman SessionStart,UserPromptSubmit 문구 3,370자). --settings 는 그 세션에만 적용되고 사용자 설정 파일은 그대로다.
+PLUGINS_OFF="$(nw_py - "$CFG/settings.json" "$CFG/settings.local.json" 2>/dev/null <<'PY'
+import json, sys
+on = set()
+for p in sys.argv[1:]:
+    try:
+        d = json.load(open(p, encoding='utf-8'))
+    except Exception:
+        continue
+    on |= {k for k, v in (d.get('enabledPlugins') or {}).items() if v}
+print(json.dumps({'enabledPlugins': {k: False for k in sorted(on)}}) if on else '')
+PY
+)"
 
 # 잠금. 죽은 잠금은 rm 이 아니라 mv 로 치운다 - 두 데몬이 동시에 죽은 잠금을 발견해도 mv 는 하나만 성공한다.
 acquire() {
@@ -140,7 +154,7 @@ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("project_root",""))
       --name "hippocampus-$id" --model "$MODEL" --effort "$effort" \
       --permission-mode "$PERM_MODE" \
       --tools "Read,Edit,Write,Grep,Glob,Bash,WebFetch,WebSearch" \
-      --disable-slash-commands --append-system-prompt "$brief" \
+      --disable-slash-commands --append-system-prompt "$brief" ${PLUGINS_OFF:+--settings "$PLUGINS_OFF"} \
       --allowedTools "Read" "Edit" "Write" "Grep" "Glob" "Bash(python3 *)" "Bash(python *)" "Bash(py *)" "Bash(ls *)" "Bash(wc *)" "Bash(cat *)" "Bash(sed *)" "Bash(mv *)" "Bash(cp *)" "Bash(mkdir *)" "Bash(date *)" "Bash(git -C * log*)" "Bash(git -C * show*)" "Bash(git -C * rev-parse*)" "Bash(git -C * diff*)" \
       --disallowedTools \
         "Bash(git push*)" "Bash(git commit*)" "Bash(git reset*)" "Bash(git checkout*)" "Bash(git switch*)" "Bash(git stash*)" "Bash(git rebase*)" "Bash(git merge*)" "Bash(git restore*)" "Bash(git clean*)" "Bash(git rm*)" "Bash(git mv*)" "Bash(git add*)" \

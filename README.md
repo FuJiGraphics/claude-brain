@@ -303,7 +303,7 @@ echo acceptEdits > ~/.claude/skills/brain/scripts/hippocampus-perm.mode
 
 effort 는 설정값(기본 medium)이 모든 모드에 쓰이고, `/claude-brain-effort auto` 일 때만 위 표의 모드별 값을 쓴다. 2026-09-30 실측에서 medium 은 high 대비 턴이 절반이었고 격리 시험 3건의 품질 차이는 없었다.
 
-**토큰 절약.** 에이전트는 턴마다 그때까지의 대화 전체를 다시 읽으므로 사용량은 대략 턴 수 x 평균 컨텍스트다. 그래서 해마는 (1) 지침 `agents/hippocampus.md` 에서 이번 모드에 필요한 절만 시스템 프롬프트에 싣고(`scripts/hippocampus-brief.py`), (2) 스킬 목록을 싣지 않고(`--disable-slash-commands`), (3) 넓은 grep 은 파일 목록으로 먼저 좁히고 무관한 조회는 한 턴에 묶는다.
+**토큰 절약.** 에이전트는 턴마다 그때까지의 대화 전체를 다시 읽으므로 사용량은 대략 턴 수 x 평균 컨텍스트다. 그래서 해마는 (1) 지침 `agents/hippocampus.md` 에서 이번 모드에 필요한 절만 시스템 프롬프트에 싣고(`scripts/hippocampus-brief.py`), (2) 스킬 목록을 싣지 않고(`--disable-slash-commands`), (3) 사용자 설정에서 켜진 플러그인을 그 세션에서만 끄고(`--settings`, 사용자 설정 파일은 그대로), (4) 넓은 grep 은 파일 목록으로 먼저 좁히고 무관한 조회는 한 턴에 묶는다.
 
 - 데몬은 세션과 독립된 프로세스이고 잠금 디렉터리로 단일 실행을 보장한다. 큐가 비면 스스로 종료한다.
 - `claude` 가 20초 안에 비정상 종료하면(플래그, 로그인 문제) 큐를 태우지 않고 데몬이 멈춘다. 처리 중 죽으면 다음 기동 때 그 항목을 한 번만 다시 돌린다.
