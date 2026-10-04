@@ -33,12 +33,14 @@ disable-model-invocation: true
 | `stop` | `bash <brain>/scripts/hippocampus-ctl.sh stop` (지금 항목이 끝나면 멈춘다) | 훅 |
 | `sleep` | `bash <brain>/scripts/sleep.sh` - 투입만 하고 곧 끝난다. 처리는 해마가 뒤에서 한다 | 훅 |
 | `results` | `bash <brain>/scripts/hippocampus-ctl.sh results --brief` (전체는 `results`, 본 것 표시는 `--ack`) | 훅 |
+| `app` | `bash <brain>/scripts/editor.sh` - brain 앱(로컬 웹)을 띄우고 주소를 알린다(옛 이름 editor 도 받는다). 끄기는 `editor.sh stop` | 훅 |
 | `recall <이름>...` | 현재 폴더에서 `bash <brain>/scripts/recall.sh <이름>...`. 찾은 기억의 요지와 경로를 알려 준다 | 모델 |
 | `remember <내용>` | `bash <brain>/scripts/remember.sh "<내용> - 근거: <file:line 또는 사용자 발화>"` - 해마 큐에 넣고 끝난다. 근거는 대화에서 찾아 붙이고 사용자에게 되묻지 않는다 | 모델 |
 
 ## 지키는 것
 
 - cortex 쓰기는 hippocampus 만 한다(여기서도 직접 고치지 않는다). 사용자의 요청은 `remember.sh` 로 넘긴다.
+- 돌보기 앱(`editor/`)도 cortex 를 직접 고치지 않는다 - 먹이,정정은 remember.sh, 최적화는 sweep 큐로 넘긴다. 앱이 직접 쓰는 것은 성격(`persona/`)과 캐시,모음(`.active/topics/`, `.active/explain/`, `.active/feedback/`)뿐이다. 피드백 우체통도 보낼 때 remember.sh 로 넘긴다.
 - 하드 삭제는 없다. 잊은 기억은 `dormant.md`(잠재) 또는 `_archive/` 로 옮겨진다.
 - 해마는 사용자에게 묻지 않는다. 판단이 필요한 것은 해마가 정하고, 코드 문제는 사실로 기억해 그 코드를 만지는 세션에 떠오르게 한다.
 - 설치, 훅 등록, 잠 예약, 명령어 파일은 README 의 설치 절을 따른다.
