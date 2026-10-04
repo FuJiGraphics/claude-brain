@@ -1,0 +1,182 @@
+{
+ "memories": {
+  "combat-turn-order-speed-stat": [
+   "ターン順序はspeedステータスの降順、同じなら味方が先だ",
+   "`TurnQueue.Build`、同率処理、先制",
+   "- `TurnQueue.Build`がspeedの降順でキューを作る。同率なら味方が敵より先だ(ユーザー決定 2026-09-12)。\n- 同率ルールを変えるとボス戦バランス表が全部ズレる。"
+  ],
+  "combat-crit-roll-uses-seeded-rng": [
+   "クリティカル判定は戦闘ごとにシードを固定した乱数を使う - UnityEngine.Random禁止",
+   "`BattleRng`、リプレイ、再現",
+   "- `BattleRng(seed)`1つでクリティカル、回避を判定する。`UnityEngine.Random`を混ぜるとリプレイがズレる(罠)。\n- シードは`BattleContext.Seed`にある。"
+  ],
+  "combat-status-effect-stack-cap": [
+   "状態異常の積み重ねは最大3で、継続時間は最も長いもので上書きする",
+   "`StatusEffect.Apply`、毒、火傷",
+   "- 毒、火傷は3積み重ねまで。超えたら継続時間だけ最も長い値で上書きする。\n- 積み重ね上限は`StatusConfig.asset`が管理する。"
+  ],
+  "combat-damage-formula-armor": [
+   "ダメージ公式は攻撃力×倍率-防御力×0.5、最小1",
+   "`DamageCalc`、防御力、最小ダメージ",
+   "- `DamageCalc.Compute`が管理する。最小ダメージ1はゲームデザイン要件だ。\n- 防御貫通スキルは0.5係数だけ0.2に変える。"
+  ],
+  "combat-skill-cooldown-in-turns": [
+   "スキルクールダウンは秒ではなくターン単位だ",
+   "`SkillSlot.Cooldown`、ターン終了",
+   "- クールダウンは自分のターンが終わるときに1減る。敵のターンでは減らない。"
+  ],
+  "ui-dialogue-box-pixel-perfect": [
+   "ダイアログボックスはPixel Perfect Camera倍率に合わせて9-sliceを整数倍だけ拡大する",
+   "`DialogueBox`、9-slice、ぼけ",
+   "- 倍率が整数でないと枠線のピクセルがぼける(罠)。`PixelPerfectCamera.assetsPPU`は16だ。"
+  ],
+  "ui-inventory-grid-drag": [
+   "インベントリドラッグはスロット上に0.15秒留まらないと交換できない",
+   "`InventoryGrid`、ドラッグ&ドロップ、誤作動",
+   "- すぐに交換すると、スクロール中の誤作動が多かった。0.15秒の遅延はユーザー要望だ。"
+  ],
+  "ui-font-korean-bitmap": [
+   "한글フォントはビットマップ Galmuri11 1つだけ使う",
+   "フォント、TextMeshPro、Galmuri",
+   "- TMPフォントアセット`Galmuri11 SDF`を使う。他の韓国語フォントを混ぜると行の高さが揺らぐ。"
+  ],
+  "ui-hp-bar-tween": [
+   "HPバーは減るとき白いアフターイメージが0.4秒後に追従する",
+   "`HpBar`、DOTween、アフターイメージ",
+   "- `HpBar.Damage`が前のバーを即座に、白いアフターイメージを0.4秒後に減らす。"
+  ],
+  "save-json-version-migration": [
+   "セーブはJSONで、versionフィールドで古いセーブを上げる",
+   "`SaveSystem`、マイグレーション、version",
+   "- `SaveSystem.Load`がversionを見て`Migrations`を順に適用する。\n- フィールドを削除せずに名前だけ変える - 古いセーブが壊れる(事故 2026-09-20)。"
+  ],
+  "save-autosave-on-scene-change": [
+   "自動保存はシーン転換の直前だけ - 戦闘中の保存禁止",
+   "自動保存、シーン転換、戦闘",
+   "- 戦闘中に保存するとターンキューが半分シリアライズされて、読み込み時にクラッシュする(罠)。"
+  ],
+  "save-path-persistent-data": [
+   "セーブ場所はpersistentDataPath/saves/slot{n}.json",
+   "保存パス、スロット",
+   "- スロットは3個。クラウド同期はまだない。"
+  ],
+  "build-addressables-before-player": [
+   "プレイヤービルド前にAddressablesを先にビルドする必要がある",
+   "Addressables、ビルド順序、リソース欠落",
+   "- 順序を変えると実行はできるが、モンスタースプライトが空になる(罠)。\n- `Tools/Build/All`メニューが順序を守る。"
+  ],
+  "build-steam-depot-upload": [
+   "Steamアップロードはdepot2つ - Windows、Mac",
+   "Steamworks、depot、配布",
+   "- `steam_build/app_build.vdf`を使う。Macビルドは公証後にアップロードする。"
+  ],
+  "build-il2cpp-stripping": [
+   "IL2CPPコードストリッピングがリフレクションを使うセーブクラスを削除する - link.xmlが必要",
+   "IL2CPP、link.xml、ストリッピング",
+   "- `Assets/link.xml`に`SaveData`ネームスペースを残す。なければリリースビルドだけロード失敗する。"
+  ],
+  "db-migration-knex-order": [
+   "マイグレーションはknexだけで使い、ファイル名の時間順で実行する",
+   "knex、マイグレーション、順序",
+   "- 手動SQLでスキーマを変えると次のデプロイでマイグレーションが衝突する(事故 2026-09-02)。"
+  ],
+  "db-order-status-enum": [
+   "注文ステータスはpending、paid、brewing、done、canceledの5つ",
+   "注文ステータス、enum、キャンセル",
+   "- ステータス遷移は`OrderStateMachine`1つが管理する。直接UPDATEしない。"
+  ],
+  "db-connection-pool-size": [
+   "コネクションプールは10 - サーバーレスに移せば1に減らす",
+   "pgプール、コネクション",
+   "- プールが大きいとDB最大接続数を超える。"
+  ],
+  "auth-jwt-refresh-rotation": [
+   "リフレッシュトークンは使うたびに新しく発行して、古いものは即座に無効にする",
+   "JWT、リフレッシュトークン、ローテーション",
+   "- 再利用が検出されたらそのユーザーのトークンを全部無効にする(セキュリティ決定)。"
+  ],
+  "auth-staff-role": [
+   "スタッフ権限はstaff、ownerの2つで、払い戻しはownerだけできる",
+   "権限、払い戻し、owner",
+   "- `requireRole(\"owner\")`ミドルウェアを払い戻しルートに付ける。"
+  ],
+  "deploy-fly-io-secrets": [
+   "デプロイはfly.io、シークレットはfly secretsだけで入れる",
+   "fly.io、デプロイ、secrets、環境変数",
+   "- `.env`をイメージに入れない。`fly secrets set`を使う。"
+  ],
+  "deploy-healthcheck-db": [
+   "ヘルスチェックはDBのpingまで見る - そうしないと死んだインスタンスにトラフィックが行く",
+   "ヘルスチェック、/health",
+   "- `/health`が`SELECT 1`を実行する。タイムアウト2秒。"
+  ],
+  "deploy-payment-webhook-idempotent": [
+   "決済ウェブフックはpaymentKeyで冪等処理する",
+   "トスペイメンツ、ウェブフック、重複決済",
+   "- 同じウェブフックが2、3回来る。`payments.payment_key`ユニーク制約で防ぐ(罠)。"
+  ],
+  "swiftdata-migration-plan": [
+   "SwiftDataスキーマを変えるときはVersionedSchemaとマイグレーションプランを一緒にアップするする",
+   "SwiftData、マイグレーション",
+   "- 落とすとアップデートしたユーザーアプリが起動直後に終了する(事故)。"
+  ],
+  "widget-timeline-refresh": [
+   "ウィジェットは真夜中にタイムラインを再作成する",
+   "WidgetKit、タイムライン、真夜中",
+   "- `.after(nextMidnight)`ポリシーを使う。"
+  ],
+  "streak-timezone": [
+   "連続記録はユーザーのタイムゾーン基準の日付で数える",
+   "連続記録、タイムゾーン",
+   "- UTCで数えると海外ユーザーの連続記録が途絶える(ユーザー報告)。"
+  ],
+  "haptics-on-check": [
+   "習慣をチェックすると軽いハプティック1つ - 成功ハプティックは使わない",
+   "ハプティック、フィードバック",
+   "- ユーザー選好: 賑やかすぎるというフィードバックがあった。"
+  ],
+  "unity-serializefield-rename": [
+   "シリアライズフィールド名を変えるときはFormerlySerializedAsを付ける",
+   "FormerlySerializedAs、インスペクタ値欠落",
+   "- 付けないとプリファブに入れた値が静かに消える(罠)。"
+  ],
+  "unity-coroutine-disabled-object": [
+   "非アクティブなオブジェクトではコルーチンが開始されない",
+   "StartCoroutine、非アクティブ",
+   "- 無効化されたオブジェクトから呼ぶとエラーなく何も起こらない。"
+  ],
+  "unity-meta-files-commit": [
+   ".metaファイルは必ず一緒にコミットする",
+   ".meta、GUID、壊れた参照",
+   "- 落とすと他のPCでプリファブ参照が全部Missingになる。"
+  ],
+  "node-esm-dirname": [
+   "ESMには__dirnameがない - import.meta.urlで作る",
+   "ESM、__dirname",
+   "- `fileURLToPath(new URL(\".\", import.meta.url))`"
+  ],
+  "commit-message-korean": [
+   "コミットメッセージは日本語で、プリフィックスはfeat、fix、refactor、chore",
+   "コミット、コンベンション",
+   "- ユーザー決定。1コミット1タスク。"
+  ],
+  "ask-before-delete": [
+   "ファイルを削除する前に何が消えるかを先に言う",
+   "削除、確認",
+   "- ユーザー選好。"
+  ]
+ },
+ "notes": {
+  "pixel-quest": "2Dピクセルゲーム風RPG。ターン制戦闘、インベントリ、セーブが肝だ。",
+  "cafe-order-api": "カフェ注文APIサーバー。Express + PostgreSQL、決済はトスペイメンツ。",
+  "habit-tracker": "習慣記録iOSアプリ。SwiftUI + SwiftData。",
+  "my-blog": "個人ブログ。Astro静的サイト。"
+ },
+ "journal": [
+  "会話から新しい記憶2個を拾った: セーブマイグレーション事故、クリティカル乱数シード",
+  "フィードから記憶1個を保存: 決済ウェブフックはpaymentKeyで冪等処理",
+  "整理: 重なった戦闘教訓2個を1つにまとめてインデックスを減らした",
+  "会話から新しい記憶1個を拾った: 連続記録はユーザーのタイムゾーン基準の日付",
+  "会話から新しい記憶1個を拾った: ビルド前にAddressablesを先に"
+ ]
+}

@@ -1,0 +1,182 @@
+{
+ "memories": {
+  "combat-turn-order-speed-stat": [
+   "回合顺序按速度属性降序排列，相同时我方先行动",
+   "`TurnQueue.Build`, 同率处理, 先攻",
+   "- `TurnQueue.Build` 按速度降序排队。同率时我方优先于敌方(用户决定 2026-09-12)。\n- 改变同率规则会导致Boss战平衡表完全错乱。"
+  ],
+  "combat-crit-roll-uses-seeded-rng": [
+   "暴击判定使用每场战斗固定种子的随机数 - 禁止用UnityEngine.Random",
+   "`BattleRng`, 回放, 重现",
+   "- 用 `BattleRng(seed)` 处理暴击和闪避。混入 `UnityEngine.Random` 会破坏回放(陷阱)。\n- 种子存储在 `BattleContext.Seed` 中。"
+  ],
+  "combat-status-effect-stack-cap": [
+   "状态异常叠加最多3层，持续时间刷新为最长值",
+   "`StatusEffect.Apply`, 中毒, 灼烧",
+   "- 中毒、灼烧最多3层。超出时仅更新持续时间为最长值。\n- 叠加上限由 `StatusConfig.asset` 管理。"
+  ],
+  "combat-damage-formula-armor": [
+   "伤害公式为 攻击力 × 倍率 - 防御力 × 0.5, 最小1点",
+   "`DamageCalc`, 防御力, 最小伤害",
+   "- 由 `DamageCalc.Compute` 处理。最小伤害1点是策划需求。\n- 护甲穿透技能只需将0.5系数改为0.2。"
+  ],
+  "combat-skill-cooldown-in-turns": [
+   "技能冷却时间以回合计，不是秒",
+   "`SkillSlot.Cooldown`, 回合结束",
+   "- 冷却时间在己方回合结束时减少1。敌方回合不减少。"
+  ],
+  "ui-dialogue-box-pixel-perfect": [
+   "对话框按Pixel Perfect Camera比例用9-slice整数倍拉伸",
+   "`DialogueBox`, 9-slice, 模糊",
+   "- 如果比例不是整数，边框像素会模糊(陷阱)。`PixelPerfectCamera.assetsPPU` 为16。"
+  ],
+  "ui-inventory-grid-drag": [
+   "背包拖拽需要在槽位上停留0.15秒才能交换",
+   "`InventoryGrid`, 拖放, 误操作",
+   "- 立即交换会在滚动中频繁误操作。0.15秒延迟是用户要求。"
+  ],
+  "ui-font-korean-bitmap": [
+   "韩文仅用Galmuri11位图字体",
+   "字体, TextMeshPro, Galmuri",
+   "- 使用TMP字体资源 `Galmuri11 SDF`。混用其他韩文字体会导致行高不稳定。"
+  ],
+  "ui-hp-bar-tween": [
+   "HP条扣血时白色残影在0.4秒后跟随",
+   "`HpBar`, DOTween, 残影",
+   "- `HpBar.Damage` 立即减少前面的条，白色残影延迟0.4秒减少。"
+  ],
+  "save-json-version-migration": [
+   "存档为JSON格式，用version字段升级旧存档",
+   "`SaveSystem`, 迁移, version",
+   "- `SaveSystem.Load` 检查version并依次应用 `Migrations`。\n- 不要删除字段，只改名字 - 旧存档会损坏(事故 2026-09-20)。"
+  ],
+  "save-autosave-on-scene-change": [
+   "自动存档仅在场景切换前 - 禁止战斗中存档",
+   "自动存档, 场景切换, 战斗",
+   "- 战斗中存档会导致回合队列半序列化，加载时崩溃(陷阱)。"
+  ],
+  "save-path-persistent-data": [
+   "存档位置为persistentDataPath/saves/slot{n}.json",
+   "存档路径, 存档槽",
+   "- 共3个存档槽。暂无云同步。"
+  ],
+  "build-addressables-before-player": [
+   "玩家构建前必须先构建Addressables",
+   "Addressables, 构建顺序, 资源缺失",
+   "- 颠倒顺序会导致游戏可以运行但怪物精灵图空白(陷阱)。\n- `Tools/Build/All` 菜单遵守此顺序。"
+  ],
+  "build-steam-depot-upload": [
+   "Steam上传需要2个depot - Windows和Mac",
+   "Steamworks, depot, 发布",
+   "- 使用 `steam_build/app_build.vdf`。Mac构建上传前需公证。"
+  ],
+  "build-il2cpp-stripping": [
+   "IL2CPP代码剥除会删除使用反射的存档类 - 需要link.xml",
+   "IL2CPP, link.xml, 剥除",
+   "- 在 `Assets/link.xml` 中保留 `SaveData` 命名空间。缺少会导致发布构建加载失败。"
+  ],
+  "db-migration-knex-order": [
+   "迁移仅用knex，按文件名时间顺序执行",
+   "knex, 迁移, 顺序",
+   "- 手动改SQL会导致下次部署迁移冲突(事故 2026-09-02)。"
+  ],
+  "db-order-status-enum": [
+   "订单状态有五种：pending, paid, brewing, done, canceled",
+   "订单状态, enum, 取消",
+   "- 状态转移由 `OrderStateMachine` 单独管理。不要直接UPDATE。"
+  ],
+  "db-connection-pool-size": [
+   "连接池为10 - 迁移到无服务器时减为1",
+   "pg pool, 连接",
+   "- 池太大会超过DB最大连接数限制。"
+  ],
+  "auth-jwt-refresh-rotation": [
+   "刷新令牌每次使用时重新发放，旧令牌立即撤销",
+   "JWT, 刷新令牌, 轮转",
+   "- 检测到重用则撤销该用户的所有令牌(安全决定)。"
+  ],
+  "auth-staff-role": [
+   "员工权限有两种：staff和owner，仅owner可退款",
+   "权限, 退款, owner",
+   "- 在退款路由上使用 `requireRole(\"owner\")` 中间件。"
+  ],
+  "deploy-fly-io-secrets": [
+   "部署在fly.io，机密值仅用fly secrets设置",
+   "fly.io, 部署, secrets, 环境变量",
+   "- 不要把 `.env` 打入镜像。使用 `fly secrets set`。"
+  ],
+  "deploy-healthcheck-db": [
+   "健康检查需要ping数据库 - 否则流量会流向死掉的实例",
+   "健康检查, /health",
+   "- `/health` 执行 `SELECT 1`。超时2秒。"
+  ],
+  "deploy-payment-webhook-idempotent": [
+   "支付Webhook用paymentKey做幂等处理",
+   "Toss Payments, Webhook, 重复支付",
+   "- 同一Webhook会来多次。用 `payments.payment_key` 唯一约束阻止(陷阱)。"
+  ],
+  "swiftdata-migration-plan": [
+   "修改SwiftData模式时需同时提交VersionedSchema和迁移计划",
+   "SwiftData, 迁移",
+   "- 遗漏会导致更新后的用户应用启动即崩溃(事故)。"
+  ],
+  "widget-timeline-refresh": [
+   "Widget在午夜刷新时间线",
+   "WidgetKit, 时间线, 午夜",
+   "- 使用 `.after(nextMidnight)` 策略。"
+  ],
+  "streak-timezone": [
+   "连续记录按用户时区日期计数",
+   "连续记录, 时区",
+   "- 用UTC计数会导致海外用户连续记录中断(用户反馈)。"
+  ],
+  "haptics-on-check": [
+   "勾选习惯时一次轻微震动 - 不用成功震动反馈",
+   "震动, 反馈",
+   "- 用户偏好：有反馈太吵闹。"
+  ],
+  "unity-serializefield-rename": [
+   "重命名序列化字段时要加FormerlySerializedAs",
+   "FormerlySerializedAs, Inspector值丢失",
+   "- 不加会导致Prefab中的值悄无声息消失(陷阱)。"
+  ],
+  "unity-coroutine-disabled-object": [
+   "协程无法从非激活对象启动",
+   "StartCoroutine, 非激活",
+   "- 从禁用对象调用不会报错，但什么都不会发生。"
+  ],
+  "unity-meta-files-commit": [
+   ".meta文件必须一起提交",
+   ".meta, GUID, 丢失引用",
+   "- 遗漏会导致其他PC中Prefab引用全变Missing。"
+  ],
+  "node-esm-dirname": [
+   "ESM中没有__dirname - 用import.meta.url创建",
+   "ESM, __dirname",
+   "- `fileURLToPath(new URL(\".\", import.meta.url))`"
+  ],
+  "commit-message-korean": [
+   "提交信息用韩文，前缀为feat, fix, refactor, chore",
+   "提交, 约定",
+   "- 用户决定。一次提交仅做一件事。"
+  ],
+  "ask-before-delete": [
+   "删除文件前先说明会丢失什么",
+   "删除, 确认",
+   "- 用户偏好。"
+  ]
+ },
+ "notes": {
+  "pixel-quest": "2D像素RPG。回合制战斗、背包、存档是核心。",
+  "cafe-order-api": "咖啡厅订单API服务。Express + PostgreSQL，支付用Toss Payments。",
+  "habit-tracker": "习惯追踪iOS应用。SwiftUI + SwiftData。",
+  "my-blog": "个人博客。Astro静态网站。"
+ },
+ "journal": [
+  "从对话中整理出新记忆2条：存档迁移事故、暴击随机数种子",
+  "吸收饲料记忆1条：支付Webhook用paymentKey做幂等处理",
+  "整理：合并2条重复的战斗经验为1条，减少索引",
+  "从对话中整理出新记忆1条：连续记录按用户时区日期计数",
+  "从对话中整理出新记忆1条：构建前先构建Addressables"
+ ]
+}

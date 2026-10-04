@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """홍보 영상용 가상의 데모 뇌를 만든다 - 실제 기억(cortex)과 완전히 분리된 폴더에.
-사용법: make_demo.py <출력 폴더>   → <출력>/cortex, <출력>/active, <출력>/persona
+사용법: make_demo.py <출력 폴더> [--lang ko|en|ja|zh]   → <출력>/cortex, <출력>/active, <출력>/persona
+한국어가 원본이고, 다른 언어는 promo/demo/<언어>.json(translate_demo.py 가 만든 번역)으로 제목, 키워드, 본문, 설명, 일지를 바꾼다.
 서버를 BRAIN_CORTEX=<출력>/cortex BRAIN_ACTIVE=<출력>/active BRAIN_PERSONA_DIR=<출력>/persona 로 띄우면 이 데모를 보여 준다."""
 import json
 import os
@@ -128,8 +129,34 @@ def lesson(root, rel_dir, item):
     return '- [%s](lessons/%s.md) - %s' % (title, fn, kw), 'lessons/%s.md' % fn, days
 
 
+JOURNAL = [
+    ('replay', 'pixel-quest', '대화를 되짚어 새 기억 2개: 세이브 마이그레이션 사고, 치명타 난수 시드', 30),
+    ('record', 'cafe-order-api', '먹이로 받은 기억 1개 새김: 결제 웹훅은 paymentKey 로 멱등 처리', 26),
+    ('sweep', 'pixel-quest', '정리: 겹친 전투 교훈 2개를 하나로 합치고 색인을 줄였다', 20),
+    ('replay', 'habit-tracker', '대화를 되짚어 새 기억 1개: 연속 기록은 사용자 시간대 기준', 12),
+    ('replay', 'pixel-quest', '대화를 되짚어 새 기억 1개: 빌드 전에 Addressables 먼저', 5),
+]
+
+
+def localize(lang):
+    """[번역 적용] promo/demo/<언어>.json 의 memories{파일: [제목, 키워드, 본문]}, notes{슬러그: 설명}, journal[요약] 로 바꾼다"""
+    global PROJECTS, STACKS, COMMON, JOURNAL
+    if lang == 'ko':
+        return
+    tr = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'demo', lang + '.json'), encoding='utf-8'))
+    M = tr['memories']
+    fix = lambda it: (it[0],) + tuple(M[it[0]]) + (it[4],) if it[0] in M else it
+    PROJECTS = [(slug, stack, tr['notes'].get(slug, note), {k: [fix(x) for x in v] for k, v in idx.items()}) for slug, stack, note, idx in PROJECTS]
+    STACKS = {k: [fix(x) for x in v] for k, v in STACKS.items()}
+    COMMON = [fix(x) for x in COMMON]
+    JOURNAL = [(m, sl, tr['journal'][i] if i < len(tr['journal']) else su, h) for i, (m, sl, su, h) in enumerate(JOURNAL)]
+
+
 def main():
-    out = os.path.abspath(sys.argv[1])
+    a = sys.argv[1:]
+    lang = a[a.index('--lang') + 1] if '--lang' in a else 'ko'
+    localize(lang)
+    out = os.path.abspath(a[0])
     shutil.rmtree(out, ignore_errors=True)
     cx, act, per = os.path.join(out, 'cortex'), os.path.join(out, 'active'), os.path.join(out, 'persona')
     rows, strength = [], {}
@@ -165,14 +192,7 @@ def main():
     w(os.path.join(hc, 'strength.json'), json.dumps({'generated': time.strftime('%Y-%m-%d'), 'memories': strength}, ensure_ascii=False))
     w(os.path.join(hc, 'sleep', 'last'), str(int(NOW - 7 * 3600)))
     w(os.path.join(hc, 'sleep', 'last-summary.txt'), '이상 없음')
-    journal = [
-        ('replay', 'pixel-quest', '대화를 되짚어 새 기억 2개: 세이브 마이그레이션 사고, 치명타 난수 시드', 30),
-        ('record', 'cafe-order-api', '먹이로 받은 기억 1개 새김: 결제 웹훅은 paymentKey 로 멱등 처리', 26),
-        ('sweep', 'pixel-quest', '정리: 겹친 전투 교훈 2개를 하나로 합치고 색인을 줄였다', 20),
-        ('replay', 'habit-tracker', '대화를 되짚어 새 기억 1개: 연속 기록은 사용자 시간대 기준', 12),
-        ('replay', 'pixel-quest', '대화를 되짚어 새 기억 1개: 빌드 전에 Addressables 먼저', 5),
-    ]
-    for i, (mode, slug, summ, hrs) in enumerate(journal):
+    for i, (mode, slug, summ, hrs) in enumerate(JOURNAL):
         rid = '2026100%d-demo-%02d' % (i % 9, i)
         t = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(NOW - hrs * 3600))
         w(os.path.join(hc, 'done', rid + '.json'), json.dumps({'id': rid, 'status': 'done', 'summary': summ, 'finished_at': t}, ensure_ascii=False))
@@ -180,13 +200,13 @@ def main():
     os.makedirs(os.path.join(hc, 'queue'), exist_ok=True)
     # 앱 상태: 설치일(옮겨 온 기억이 없게 오래전), 설정
     w(os.path.join(act, 'brain-born'), time.strftime('%Y-%m-%d', time.localtime(NOW - 23 * DAY)) + '\n', 23)
-    w(os.path.join(act, 'config'), 'enabled=1\nhippocampus_model=claude-sonnet-5-5\nhippocampus_effort=medium\n')
+    w(os.path.join(act, 'config'), 'enabled=1\nhippocampus_model=claude-sonnet-5-5\nhippocampus_effort=medium\nlang=%s\n' % lang)
     # 성격: 습관 앱은 부엉이
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scripts'))
     os.environ['BRAIN_PERSONA_DIR'] = per
     import persona
     persona.PERSONA_DIR = per
-    persona.save('habit-tracker', persona.from_breed('owl'))
+    persona.save('habit-tracker', persona.from_breed('owl', lang))
     print(out)
 
 

@@ -1,0 +1,182 @@
+{
+ "memories": {
+  "combat-turn-order-speed-stat": [
+   "Turn order is by speed stat descending; ties go to party members first.",
+   "`TurnQueue.Build`, tie-breaking, first strike",
+   "- `TurnQueue.Build` queues by speed descending. On ties, party members go before enemies (user decision 2026-09-12).\n- Changing tie rules breaks all boss balance tables."
+  ],
+  "combat-crit-roll-uses-seeded-rng": [
+   "Crit rolls use a seeded RNG fixed per battle — UnityEngine.Random is forbidden.",
+   "`BattleRng`, replay, reproducibility",
+   "- `BattleRng(seed)` handles both crits and dodges. Mixing in `UnityEngine.Random` breaks replays (trap).\n- Seed lives in `BattleContext.Seed`."
+  ],
+  "combat-status-effect-stack-cap": [
+   "Status effects stack to max 3; duration resets to the longest.",
+   "`StatusEffect.Apply`, poison, burn",
+   "- Poison and burn cap at 3 stacks. Overflow only refreshes duration to the longest value.\n- Stack limit is owned by `StatusConfig.asset`."
+  ],
+  "combat-damage-formula-armor": [
+   "Damage formula: attack × multiplier − armor × 0.5, minimum 1.",
+   "`DamageCalc`, armor, minimum damage",
+   "- `DamageCalc.Compute` owns it. Minimum 1 is a design requirement.\n- Armor-piercing skills change the 0.5 coefficient to 0.2."
+  ],
+  "combat-skill-cooldown-in-turns": [
+   "Skill cooldowns are in turns, not seconds.",
+   "`SkillSlot.Cooldown`, turn end",
+   "- Cooldown decrements by 1 when your turn ends. Enemy turns don't count."
+  ],
+  "ui-dialogue-box-pixel-perfect": [
+   "Dialogue boxes scale 9-slice only by integer multiples of Pixel Perfect Camera ratio.",
+   "`DialogueBox`, 9-slice, blur",
+   "- Non-integer ratios blur border pixels (trap). `PixelPerfectCamera.assetsPPU` is 16."
+  ],
+  "ui-inventory-grid-drag": [
+   "Inventory drag-and-drop needs 0.15 seconds hover to swap.",
+   "`InventoryGrid`, drag-and-drop, malfunction",
+   "- Immediate swap caused frequent bugs during scrolling. 0.15s delay was user request."
+  ],
+  "ui-font-korean-bitmap": [
+   "Use only one bitmap font for Korean: Galmuri11.",
+   "font, TextMeshPro, Galmuri",
+   "- Use TMP font asset `Galmuri11 SDF`. Mixing other Korean fonts causes line height jitter."
+  ],
+  "ui-hp-bar-tween": [
+   "HP bar shows white afterimage trailing 0.4s after damage.",
+   "`HpBar`, DOTween, afterimage",
+   "- `HpBar.Damage` depletes the front bar instantly and the white trail after 0.4s."
+  ],
+  "save-json-version-migration": [
+   "Save is JSON; use version field to migrate old saves.",
+   "`SaveSystem`, migration, version",
+   "- `SaveSystem.Load` checks version and applies `Migrations` in order.\n- Don't delete fields—rename only—or old saves break (incident 2026-09-20)."
+  ],
+  "save-autosave-on-scene-change": [
+   "Autosave only right before scene change — never during combat.",
+   "autosave, scene change, combat",
+   "- Saving mid-combat half-serializes the turn queue, crashing on load (trap)."
+  ],
+  "save-path-persistent-data": [
+   "Saves go to persistentDataPath/saves/slot{n}.json.",
+   "save path, slots",
+   "- 3 slots total. Cloud sync not yet implemented."
+  ],
+  "build-addressables-before-player": [
+   "Build Addressables before building the player.",
+   "Addressables, build order, missing assets",
+   "- Wrong order runs but leaves monster sprites blank (trap).\n- `Tools/Build/All` menu keeps the order."
+  ],
+  "build-steam-depot-upload": [
+   "Steam upload uses 2 depots — Windows and Mac.",
+   "Steamworks, depot, distribution",
+   "- Use `steam_build/app_build.vdf`. Notarize Mac build before upload."
+  ],
+  "build-il2cpp-stripping": [
+   "IL2CPP code stripping deletes serialization classes using reflection — link.xml needed.",
+   "IL2CPP, link.xml, stripping",
+   "- Keep `SaveData` namespace in `Assets/link.xml`. Missing it breaks loads on release builds only."
+  ],
+  "db-migration-knex-order": [
+   "Run migrations with knex only, in chronological order by filename.",
+   "knex, migration, order",
+   "- Manual SQL schema changes cause migration conflicts on next deploy (incident 2026-09-02)."
+  ],
+  "db-order-status-enum": [
+   "Order status: pending, paid, brewing, done, canceled.",
+   "order status, enum, cancellation",
+   "- `OrderStateMachine` owns transitions. Never UPDATE directly."
+  ],
+  "db-connection-pool-size": [
+   "Connection pool size is 10; reduce to 1 when moving to serverless.",
+   "pg pool, connections",
+   "- Larger pools exceed DB max connections."
+  ],
+  "auth-jwt-refresh-rotation": [
+   "Refresh token is reissued on every use; old ones revoked immediately.",
+   "JWT, refresh token, rotation",
+   "- Reuse detected triggers full token revocation for that user (security decision)."
+  ],
+  "auth-staff-role": [
+   "Staff roles are staff and owner; only owner can refund.",
+   "role, refund, owner",
+   "- Apply `requireRole(\"owner\")` middleware to refund routes."
+  ],
+  "deploy-fly-io-secrets": [
+   "Deploy on fly.io; inject secrets only via fly secrets.",
+   "fly.io, deploy, secrets, env vars",
+   "- Don't bake `.env` into the image. Use `fly secrets set`."
+  ],
+  "deploy-healthcheck-db": [
+   "Healthcheck includes database ping — otherwise dead instances get traffic.",
+   "healthcheck, /health",
+   "- `/health` runs `SELECT 1`. Timeout 2 seconds."
+  ],
+  "deploy-payment-webhook-idempotent": [
+   "Payment webhook uses paymentKey for idempotency.",
+   "TossPayments, webhook, duplicate charge",
+   "- Same webhook arrives multiple times. Prevent with `payments.payment_key` unique constraint (trap)."
+  ],
+  "swiftdata-migration-plan": [
+   "When changing SwiftData schema, commit VersionedSchema and migration plan together.",
+   "SwiftData, migration",
+   "- Missing it crashes updated users' apps on launch (incident)."
+  ],
+  "widget-timeline-refresh": [
+   "Widget recreates timeline at midnight.",
+   "WidgetKit, timeline, midnight",
+   "- Use `.after(nextMidnight)` policy."
+  ],
+  "streak-timezone": [
+   "Streak counting uses the user's timezone, not UTC.",
+   "streak, timezone",
+   "- Counting in UTC breaks international users' streaks (user report)."
+  ],
+  "haptics-on-check": [
+   "Checking a habit triggers light haptic feedback once — no success haptic.",
+   "haptic, feedback",
+   "- User preference: success haptic was too loud."
+  ],
+  "unity-serializefield-rename": [
+   "When renaming serialized fields, add FormerlySerializedAs.",
+   "FormerlySerializedAs, inspector value loss",
+   "- Missing it silently loses values in prefabs (trap)."
+  ],
+  "unity-coroutine-disabled-object": [
+   "Coroutines don't start from disabled objects.",
+   "StartCoroutine, disabled",
+   "- Calling from a disabled object fails silently."
+  ],
+  "unity-meta-files-commit": [
+   "Always commit .meta files alongside assets.",
+   ".meta, GUID, broken references",
+   "- Missing them breaks all prefab references as Missing on other PCs."
+  ],
+  "node-esm-dirname": [
+   "ESM has no __dirname — use import.meta.url instead.",
+   "ESM, __dirname",
+   "- `fileURLToPath(new URL(\".\", import.meta.url))`"
+  ],
+  "commit-message-korean": [
+   "Commit messages in Korean; prefixes: feat, fix, refactor, chore.",
+   "commit, convention",
+   "- User decision. One commit = one task."
+  ],
+  "ask-before-delete": [
+   "Before deleting files, say what will be lost first.",
+   "delete, confirmation",
+   "- User preference."
+  ]
+ },
+ "notes": {
+  "pixel-quest": "2D pixel RPG. Turn-based combat, inventory, and saves are core.",
+  "cafe-order-api": "Café order API server. Express + PostgreSQL, payments via TossPayments.",
+  "habit-tracker": "Habit tracking iOS app. SwiftUI + SwiftData.",
+  "my-blog": "Personal blog. Astro static site."
+ },
+ "journal": [
+  "Reviewed conversation, added 2 memories: save migration incident, crit RNG seed.",
+  "Absorbed 1 memory from notes: payment webhook idempotent via paymentKey.",
+  "Consolidated 2 overlapping combat lessons into 1, reduced index.",
+  "Reviewed conversation, added 1 memory: streak counting by user timezone.",
+  "Reviewed conversation, added 1 memory: build Addressables before player."
+ ]
+}

@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <title>brain promo</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Fredoka:wght@500;600&family=M+PLUS+Rounded+1c:wght@500;800&family=ZCOOL+KuaiLe&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
-  :root { --brain: #ffb3c8; --brain-d: #ff86a8; --ink: #2a1e2e; --ink2: #6e5f72; --pink: #ff6b9a; --lav: #9c7dff; --mint: #2fd18e; --lemon: #ffcf3f; --sky: #4fb1ff; }
+  :root[data-lang="en"] { --df: "Fredoka", "Jua", sans-serif; }
+  :root[data-lang="ja"] { --df: "M PLUS Rounded 1c", "Jua", sans-serif; }
+  :root[data-lang="zh"] { --df: "ZCOOL KuaiLe", "Jua", sans-serif; }
+  :root[data-lang="ja"] .cap .t, :root[data-lang="ja"] .overlay .logo, :root[data-lang="ja"] .overlay .tag { font-weight: 800; }
+  :root[data-lang="en"] .cap .t, :root[data-lang="en"] .overlay .logo, :root[data-lang="en"] .overlay .tag { font-weight: 600; }
+  :root { --df: "Jua", sans-serif; --brain: #ffb3c8; --brain-d: #ff86a8; --ink: #2a1e2e; --ink2: #6e5f72; --pink: #ff6b9a; --lav: #9c7dff; --mint: #2fd18e; --lemon: #ffcf3f; --sky: #4fb1ff; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #fff4ee; font-family: "Pretendard Variable", Pretendard, sans-serif; color: var(--ink); }
+  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #fff4ee; font-family: "Pretendard Variable", Pretendard, "Hiragino Sans", "PingFang SC", sans-serif; color: var(--ink); }
   .bg i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .7; }
   .bg i:nth-child(1) { width: 520px; height: 520px; background: #ffd6e4; left: -120px; top: -140px; animation: drift 14s ease-in-out infinite; }
   .bg i:nth-child(2) { width: 460px; height: 460px; background: #e6ddff; right: 120px; bottom: -180px; animation: drift 17s ease-in-out infinite reverse; }
@@ -21,8 +26,8 @@
   .device .clip { width: 336px; height: 664px; border-radius: 37px; overflow: hidden; background: #fff4ee; }
   iframe { width: 400px; height: 790.5px; border: 0; transform: scale(.84); transform-origin: 0 0; display: block; }
   .cap { position: absolute; left: 96px; top: 0; bottom: 0; width: 660px; display: flex; flex-direction: column; justify-content: center; }
-  .cap .k { display: inline-flex; align-self: flex-start; font-family: "Jua"; font-size: 20px; color: #fff; background: var(--pink); padding: 6px 16px; border-radius: 99px; box-shadow: 0 4px 0 #e04a7c; margin-bottom: 18px; }
-  .cap .t { font-family: "Jua"; font-size: 64px; line-height: 1.18; letter-spacing: -.01em; white-space: pre-line; }
+  .cap .k { display: inline-flex; align-self: flex-start; font-family: var(--df); font-size: 20px; color: #fff; background: var(--pink); padding: 6px 16px; border-radius: 99px; box-shadow: 0 4px 0 #e04a7c; margin-bottom: 18px; }
+  .cap .t { font-family: var(--df); font-size: 64px; line-height: 1.18; letter-spacing: -.01em; white-space: pre-line; }
   .cap .s { font-size: 25px; color: var(--ink2); margin-top: 18px; font-weight: 600; line-height: 1.45; white-space: pre-line; }
   .cap > * { transition: transform .55s cubic-bezier(.34,1.56,.64,1), opacity .35s; }
   .cap.out > * { opacity: 0; transform: translateY(18px); }
@@ -31,8 +36,8 @@
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff4ee; z-index: 20; transition: opacity .8s, transform .8s; }
   .overlay.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
   .overlay .pet { width: 230px; height: 230px; }
-  .overlay .logo { font-family: "Jua"; font-size: 110px; line-height: 1; margin-top: 6px; letter-spacing: -.02em; }
-  .overlay .tag { font-family: "Jua"; font-size: 34px; color: var(--ink2); margin-top: 14px; }
+  .overlay .logo { font-family: var(--df); font-size: 110px; line-height: 1; margin-top: 6px; letter-spacing: -.02em; }
+  .overlay .tag { font-family: var(--df); font-size: 34px; color: var(--ink2); margin-top: 14px; }
   .overlay .cmd { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 30px; font-weight: 700; background: var(--ink); color: #fff; padding: 14px 28px; border-radius: 20px; margin-top: 30px; box-shadow: 0 6px 0 #000; }
   .overlay .url { font-size: 22px; color: var(--ink2); margin-top: 22px; font-weight: 700; }
   .overlay > * { animation: up .9s cubic-bezier(.34,1.56,.64,1) backwards; }
@@ -48,7 +53,7 @@
   .pet .eye { animation: blink 4.6s infinite; transform-origin: center; transform-box: fill-box; }
   @keyframes hop { 0%, 60%, 100% { transform: translateY(0) scale(1, 1); } 70% { transform: translateY(0) scale(1.06, .92); } 82% { transform: translateY(-10px) scale(.96, 1.05); } }
   @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
-  .keycap { position: absolute; left: 96px; bottom: 54px; z-index: 25; font-family: "Jua"; font-size: 22px; background: #fff; border: 2px solid #e8dad3; border-bottom-width: 5px; border-radius: 12px; padding: 4px 14px; opacity: 0; transform: translateY(10px); transition: .3s; }
+  .keycap { position: absolute; left: 96px; bottom: 54px; z-index: 25; font-family: var(--df); font-size: 22px; background: #fff; border: 2px solid #e8dad3; border-bottom-width: 5px; border-radius: 12px; padding: 4px 14px; opacity: 0; transform: translateY(10px); transition: .3s; }
   .keycap.on { opacity: 1; transform: none; }
 </style>
 </head>
