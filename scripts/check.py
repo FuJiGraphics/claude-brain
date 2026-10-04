@@ -13,6 +13,7 @@
       금지 문자(코드,인용,외부 문서 원문 제외), 스크립트 등록 4요소, 레이어 INDEX 크기(목표 3,000자, projects 는 thalamus 가 세션 시작에 싣는 상한 2,500자 - 정보),
       전역 형식(registry 표와 슬러그,스택 폴더, harness-routing 번호,절, 단계 카드의 INDEX 링크와 세부 형식).
 """
+import re
 import os, re, sys, collections
 
 LINE_MAX = 400
@@ -202,7 +203,7 @@ def main():
         rows = [l for l in reg.splitlines() if l.startswith('|')]
         for l in rows[2:]:
             c = l.split('|')
-            if len(c) < 7 or not c[1].strip().strip('`').startswith('/'):
+            if len(c) < 7 or not re.match(r'^(/|[A-Za-z]:[\\/])', c[1].strip().strip('`')):   # /..., C:/..., C:\...
                 P['registry 형식'].append(l[:80])
                 continue
             slug, stack = c[2].strip().strip('`'), c[3].strip().strip('`')

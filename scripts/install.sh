@@ -41,7 +41,9 @@ backup() {
 # 1. 훅
 backup "$CFG/settings.json"
 mkdir -p "$CFG"
-nw_py - "$CFG/settings.json" "$BRAIN" "$MODE" <<'PY' || { echo "중단: 훅을 등록하지 못했다 - $CFG/settings.json 을 확인한 뒤 다시(CLAUDE.md, 잠 예약은 건드리지 않았다)"; exit 1; }
+# 훅이 부를 파이썬 - Windows 는 python3 이 없고 python 이나 py 런처만 있는 경우가 많다. 경로는 파이썬이 읽는 표기(C:/...)로 넘긴다
+case "$NW_PY" in py) PYHOOK="py -3" ;; *) PYHOOK="$NW_PY" ;; esac
+nw_py - "$CFG/settings.json" "$(nw_tool_path "$BRAIN")" "$MODE" "$PYHOOK" <<'PY' || { echo "중단: 훅을 등록하지 못했다 - $CFG/settings.json 을 확인한 뒤 다시(CLAUDE.md, 잠 예약은 건드리지 않았다)"; exit 1; }
 import json, os, shlex, stat, sys
 path, brain, mode = sys.argv[1], sys.argv[2], sys.argv[3]
 path = os.path.realpath(path)   # dotfiles 로 관리하는 심링크면 링크를 끊지 않고 대상 파일을 고친다
@@ -56,7 +58,7 @@ if not isinstance(d, dict) or not isinstance(d.get('hooks', {}), dict):
 hooks = d.setdefault('hooks', {})
 # 끝의 exit 0 이 핵심이다: 파일이 없으면 python3 이 종료 코드 2 를 내는데, PreToolUse 훅의 2 는 '모든 도구 호출 차단'이다.
 # 어떤 경우에도 세션을 막지 않도록 명령 전체를 0 으로 끝낸다(출력 JSON 은 그대로 전달된다).
-cmd = 'f=%s; [ -f "$f" ] && python3 "$f" hook; exit 0' % shlex.quote(brain + '/scripts/thalamus.py')
+cmd = 'f=%s; [ -f "$f" ] && %s "$f" hook; exit 0' % (shlex.quote(brain + '/scripts/thalamus.py'), sys.argv[4])
 mine = lambda h: 'scripts/thalamus.py' in (h.get('command') or '')
 for ev in list(hooks):
     groups = []
@@ -109,17 +111,22 @@ PY
 # 2. 기억 소유 한 줄
 MD="$CFG/CLAUDE.md"
 backup "$MD"
-nw_py - "$MD" "$MODE" <<'PY' || { echo "중단: CLAUDE.md 를 고치지 못했다 - 훅은 이미 걸렸다. $MD 를 확인한 뒤 install.sh 를 다시 돌린다"; exit 1; }
+# 언어 - 처음 설치면 OS 언어로 정한다(ko, en, ja, zh 밖이면 en). 이미 정했으면 그대로 둔다. 바꾸기: scripts/config.sh lang <언어>
+if [ "$MODE" = install ] && ! grep -q '^lang=' "$BRAIN/.active/config" 2>/dev/null; then
+  echo "lang=$(nw_py "$BRAIN/scripts/lang.py" detect)" >> "$BRAIN/.active/config"
+fi
+LANG_NOW="$(nw_py "$BRAIN/scripts/lang.py" get)"
+nw_py - "$MD" "$MODE" "$BRAIN/scripts" "$LANG_NOW" <<'PY' || { echo "중단: CLAUDE.md 를 고치지 못했다 - 훅은 이미 걸렸다. $MD 를 확인한 뒤 install.sh 를 다시 돌린다"; exit 1; }
 import os, re, sys
 path, mode = sys.argv[1], sys.argv[2]
+sys.path.insert(0, sys.argv[3])
+import lang
 path = os.path.realpath(path)
 s = open(path, encoding='utf-8').read() if os.path.exists(path) else ''
 begin, end = '<!-- brain:begin -->', '<!-- brain:end -->'
 s = re.sub(r'\n*' + re.escape(begin) + r'.*?' + re.escape(end) + r'\n?', '\n', s, flags=re.S).rstrip() + '\n'
 if mode == 'install':
-    s += ('\n' + begin + '\n## 기억\n\n'
-          '- `[기억]` 으로 시작하는 메시지는 이 사용자와 함께 쌓아 온 장기 기억이다 - 과거에 직접 확인한 사실이라 믿고 판단 재료로 쓴다. '
-          '지금 코드와 다르면 지금 코드가 기준이다.\n' + end + '\n')
+    s += '\n' + begin + '\n' + lang.T[sys.argv[4]]['claude_md'] + '\n' + end + '\n'   # 네 언어의 [기억] 표시를 모두 적는다
 open(path, 'w', encoding='utf-8').write(s)
 print('기억 소유 한 줄: %s (%s)' % ('추가' if mode == 'install' else '제거', path))
 PY
@@ -193,8 +200,22 @@ PY
   elif [ "$MODE" = "uninstall" ]; then
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null; rm -f "$PL"; echo "잠 예약 해제"
   fi
+elif [ "$NW_WIN" = 1 ]; then
+  # Windows - 작업 스케줄러에 매일 04:30 으로 건다. Git Bash 의 경로 변환이 /Create 같은 인자를 망가뜨리지 않게 끈다
+  TN="brain-sleep"
+  if [ "$MODE" = "install" ] && [ "$SLEEP" = 1 ]; then
+    BASHW="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash)"
+    SLEEPW="$(nw_tool_path "$BRAIN/scripts/sleep.sh")"
+    if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks /Create /F /SC DAILY /ST 04:30 /TN "$TN" /TR "\"$BASHW\" -l \"$SLEEPW\"" >/dev/null 2>&1; then
+      echo "잠 예약: 매일 04:30 (작업 스케줄러 $TN)"
+    else
+      echo "경고: 작업 스케줄러 등록이 실패했다 - 훅과 기억은 정상. 잠은 /claude-brain-sleep 으로 손으로 돌릴 수 있다"
+    fi
+  elif [ "$MODE" = "uninstall" ]; then
+    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks /Delete /F /TN "$TN" >/dev/null 2>&1 && echo "잠 예약 해제"
+  fi
 else
-  [ "$MODE" = "install" ] && echo "잠 예약: macOS 가 아니다 - 하루 한 번 bash $BRAIN/scripts/sleep.sh 를 부르도록 cron 등에 건다"
+  [ "$MODE" = "install" ] && echo "잠 예약: 자동 등록은 macOS, Windows 만 한다 - 하루 한 번 bash $BRAIN/scripts/sleep.sh 를 부르도록 cron 등에 건다"
 fi
 
 # 4. 해제면 해마도 멈춘다 - 지금 항목이 끝나면 선다. 남은 큐는 지우지 않는다(다시 설치하면 이어서 돈다).

@@ -21,6 +21,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import plat  # noqa: E402  경로 비교(macOS, Linux, Windows)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRAIN = os.path.dirname(HERE)
 CX = os.path.join(BRAIN, 'cortex')
@@ -69,18 +72,18 @@ def registry():
             if not line.startswith('|'):
                 continue
             c = [x.strip().strip('`') for x in line.strip().strip('|').split('|')]
-            if len(c) >= 3 and c[0].startswith('/'):
-                rows.append((c[0].rstrip('/'), c[1], c[2]))
+            if len(c) >= 3 and plat.is_abs(c[0]):
+                rows.append((plat.norm(c[0]), c[1], c[2]))
     except OSError:
         pass
     return rows
 
 
 def scope(cwd):
-    cwd = (cwd or '').rstrip('/')
+    cwd = plat.norm(cwd)
     best = None
     for root, slug, stack in registry():
-        if (cwd == root or cwd.startswith(root + '/')) and (best is None or len(root) > len(best[0])):
+        if plat.under(root, cwd) and (best is None or len(root) > len(best[0])):
             best = (root, slug, stack)
     return best
 
@@ -361,7 +364,7 @@ def rollback(a):
 
 
 def enqueue(rp):
-    subprocess.call(['bash', os.path.join(HERE, 'hippocampus-enqueue.sh'), rp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.call(plat.argv(['bash', os.path.join(HERE, 'hippocampus-enqueue.sh'), rp]), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def arg(a, k, dflt=None):

@@ -12,11 +12,17 @@ ST="$BRAIN/.active/editor.json"
 OPEN=1; CMD=start
 for a in "$@"; do case "$a" in --no-open) OPEN=0;; stop) CMD=stop;; esac; done
 mkdir -p "$BRAIN/.active"
-url() { nw_py -c 'import json,sys; d=json.load(open(sys.argv[1])); print("http://127.0.0.1:%d/?t=%s" % (d["port"], d["token"]))' "$ST" 2>/dev/null; }
-pid() { nw_py -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$ST" 2>/dev/null; }
-alive() { [ -f "$ST" ] && nw_pid_is "$(pid)" server.py; }
+STN="$(nw_tool_path "$ST")"
+url() { nw_py -c 'import json,sys; d=json.load(open(sys.argv[1])); print("http://127.0.0.1:%d/?t=%s" % (d["port"], d["token"]))' "$STN" 2>/dev/null; }
+# 살아 있는지는 HTTP 로 본다 - Windows 는 Git Bash 와 네이티브 프로세스의 번호 체계가 달라 pid 로는 알 수 없다
+alive() {
+  [ -f "$ST" ] && nw_py -c 'import json,sys,urllib.request; d=json.load(open(sys.argv[1])); urllib.request.urlopen("http://127.0.0.1:%d/index.html" % d["port"], timeout=1)' "$STN" >/dev/null 2>&1
+}
 if [ "$CMD" = stop ]; then
-  if alive; then kill "$(pid)" 2>/dev/null; rm -f "$ST"; echo "brain 앱을 껐다"; else echo "실행 중인 앱 없음"; fi
+  if alive; then
+    nw_py -c 'import json,sys,urllib.request; d=json.load(open(sys.argv[1])); urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:%d/api/quit" % d["port"], data=b"{}", headers={"X-Brain-Token": d["token"], "Content-Type": "application/json"}), timeout=2)' "$STN" >/dev/null 2>&1
+    rm -f "$ST"; echo "brain 앱을 껐다"
+  else echo "실행 중인 앱 없음"; fi
   exit 0
 fi
 if ! alive; then
@@ -28,12 +34,20 @@ if ! alive; then
 fi
 U="$(url)"
 if [ "$OPEN" = 1 ]; then
-  # Chrome 이 있으면 주소창 없는 앱 창(폰 크기)으로 연다 - 브라우저 탭보다 앱처럼 보인다
+  # 주소창 없는 앱 창(폰 크기)으로 연다 - macOS 는 Chrome, Windows 는 Edge(늘 깔려 있다), Linux 는 Chrome 계열. 없으면 기본 브라우저
   if [ "$NW_MAC" = 1 ] && [ -d "/Applications/Google Chrome.app" ]; then
     open -na "Google Chrome" --args --app="$U" --window-size=450,920 >/dev/null 2>&1 || open "$U" >/dev/null 2>&1
   elif [ "$NW_MAC" = 1 ]; then open "$U" >/dev/null 2>&1
-  elif [ "$NW_WIN" = 1 ]; then cmd.exe /c start "" "$U" >/dev/null 2>&1
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$U" >/dev/null 2>&1 &
+  elif [ "$NW_WIN" = 1 ]; then
+    # Git Bash 는 /c 같은 인자를 경로로 바꾼다 - 변환을 끄고 cmd 의 start 로 연다
+    MSYS_NO_PATHCONV=1 cmd.exe /c start "" msedge "--app=$U" "--window-size=450,920" >/dev/null 2>&1 \
+      || MSYS_NO_PATHCONV=1 cmd.exe /c start "" "$U" >/dev/null 2>&1
+  else
+    opened=0
+    for b in google-chrome chromium chromium-browser microsoft-edge; do
+      if command -v "$b" >/dev/null 2>&1; then ("$b" --app="$U" --window-size=450,920 >/dev/null 2>&1 &); opened=1; break; fi
+    done
+    [ "$opened" = 0 ] && command -v xdg-open >/dev/null 2>&1 && (xdg-open "$U" >/dev/null 2>&1 &)
   fi
 fi
 echo "brain 앱: $U"

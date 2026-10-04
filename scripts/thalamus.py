@@ -56,8 +56,7 @@ ORIENT_INDEX = 3000       # 깨어남: 프로젝트 INDEX 글자 상한(넘으�
 ORIENT_STACK = 2000       # 깨어남: 스택 INDEX 글자 상한 - 옛 세션이 연 기억의 38% 는 색인을 타고, 55% 는 지도를 보고 찾아갔다(2026-09-29 실측)
 ORIENT_COMMON = 1200      # 깨어남: 공용 INDEX 글자 상한
 ORIENT_MODE = os.environ.get('BRAIN_ORIENT', 'legend')   # legend = 상한 + 지도 범례 한 줄, full = 세 지도 전문(상한 없음) - 2차 A/B 로 고른다
-LEGEND = ('지도의 색인 파일(lessons-index-*, gotchas-*, patterns-*, facts*)에 과거에 확인한 함정, 결정, 구조가 모여 있다. '
-          '링크는 각 지도 파일이 있는 폴더 기준이다.')
+# 지도 범례 문구는 lang.T[언어]['legend'] 에 있다
 ORIENT_CARDS = 8          # 깨어남: 절차 기억(단계 카드) 줄 수 상한
 AWAKE_GAP = 20 * 60       # 같은 대화록의 깨어 있는 중 재생 사이 최소 간격(초) - replay.py 와 같은 값
 AWAKE_MIN_BYTES = 4000    # 지난 처리 위치 뒤 새로 쌓인 대화록이 이보다 작으면 재생을 띄우지 않는다
@@ -81,6 +80,8 @@ LINK_RE = re.compile(r'\[([^\]]*)\]\(([^()\s]+)\)')
 PROC_RE = re.compile(r'(nb-grep|nb-load|nb-gate|curator|AskUserQuestion|model-refresh|대조\(|대조 전용|\bP[0-5]\b)')
 
 sys.path.insert(0, HERE)
+import lang as L  # noqa: E402  세션 문구의 언어(.active/config 의 lang=, 없으면 ko)
+import plat  # noqa: E402  경로 비교, bash, 프로세스 분리(macOS, Linux, Windows)
 
 
 # ---------------------------------------------------------------- 범위
@@ -95,16 +96,21 @@ def registry():
                 if not line.startswith('|'):
                     continue
                 c = [x.strip().strip('`') for x in line.strip().strip('|').split('|')]
-                if len(c) >= 3 and c[0].startswith('/'):
+                if len(c) >= 3 and plat.is_abs(c[0]):
                     c += [''] * (5 - len(c))
-                    rows.append((c[0].rstrip('/'), c[1], c[2], c[3], '|'.join(c[4:]).strip()))
+                    rows.append((plat.norm(c[0]), c[1], c[2], c[3], '|'.join(c[4:]).strip()))
     except (IOError, OSError):
         pass
     return rows
 
 
+def _wintmp():
+    import tempfile
+    return tempfile.gettempdir()
+
+
 def under(root, p):
-    return p == root or p.startswith(root + '/')
+    return plat.under(root, p)   # Windows 는 C:\, C:/, /c/ 표기와 대소문자를 맞춰 비교한다
 
 
 def scope(cwd, full=False):
@@ -113,7 +119,7 @@ def scope(cwd, full=False):
     """
     if not cwd:
         return None
-    cwd = cwd.rstrip('/')
+    cwd = plat.norm(cwd)
     if under(BRAIN, cwd) or under(os.path.realpath(BRAIN), cwd):
         return None
     best = None
@@ -432,8 +438,7 @@ def render(items):
     for _, _, c in items:
         if c not in cues:
             cues.append(c)
-    head = '[기억] %s 에 대해 기억나는 것(과거에 확인한 사실이라 지금 코드와 다를 수 있다). 기억 저장소: %s' % (
-        ', '.join('`%s`' % c for c in cues[:4]), CX)
+    head = L.t('recall') % (', '.join('`%s`' % c for c in cues[:4]), CX)
     return '\n'.join([head] + ['- %s (%s)' % (g, rel) for rel, g, _ in items])
 
 
@@ -481,23 +486,22 @@ def orient(row):
     - 링크는 각 지도 파일이 있는 폴더 기준이다
     """
     root, slug, stack, ver, note = row
-    head = ('[기억] 이 폴더는 %s 프로젝트다(%s%s). [기억] 으로 시작하는 메시지는 이 프로젝트에 대한 장기 기억이다'
-            '(과거에 확인한 사실, 지금 코드와 다를 수 있다). 기억 저장소: %s') % (slug, stack, (' ' + ver.split(' ')[0]) if ver else '', CX)
+    head = L.t('orient') % (slug, stack + ((' ' + ver.split(' ')[0]) if ver else ''), CX)
     out = [head]
     if note:
-        out.append('- 요지: %s' % clip(re.sub(r'\s+', ' ', note.replace('**', '')), ORIENT_NOTE))
+        out.append(L.t('note') % clip(re.sub(r'\s+', ' ', note.replace('**', '')), ORIENT_NOTE))
     full = ORIENT_MODE == 'full'
-    out.append('- ' + LEGEND)
+    out.append('- ' + L.t('legend'))
     pm = _map('projects/%s/INDEX.md' % slug, 10 ** 6 if full else ORIENT_INDEX, True)
     if pm:
-        out += ['--- 프로젝트 기억 지도 (projects/%s/INDEX.md)' % slug, pm]
+        out += [L.t('map_project') % ('projects/%s/INDEX.md' % slug), pm]
     if stack and stack not in ('-', '?'):
         sm = _map('stacks/%s/INDEX.md' % stack, 10 ** 6 if full else ORIENT_STACK, True)
         if sm:
-            out += ['--- 스택 기억 지도 (stacks/%s/INDEX.md)' % stack, sm]
+            out += [L.t('map_stack') % ('stacks/%s/INDEX.md' % stack), sm]
     cm_ = _map('common/INDEX.md', 10 ** 6 if full else ORIENT_COMMON)
     if cm_:
-        out += ['--- 공용 기억 지도 (common/INDEX.md)', cm_]
+        out += [L.t('map_common') % 'common/INDEX.md', cm_]
     cards = []
     for lay in (('stacks', stack), ('projects', slug)):
         if not lay[1] or lay[1] in ('-', '?'):
@@ -506,7 +510,7 @@ def orient(row):
             if '](phases/' in line and line.lstrip().startswith(('-', '*')):
                 cards.append('%s/%s: %s' % (lay[0], lay[1], gist(line, 200)))
     if cards:
-        out.append('--- 절차 기억(단계 카드 - 작업에 걸리면 그 파일을 읽는다)')
+        out.append(L.t('cards'))
         out += ['- ' + c for c in cards[:ORIENT_CARDS]]
     return '\n'.join(out)
 
@@ -592,8 +596,7 @@ def classify(d):
 # 조사 습관 - 지도는 세션 시작 때 한 번이라 계획할 즈음엔 멀어지고, 모델은 필요가 안 보이면 색인을 열지 않는다(정보만으로는 부족했다).
 # 그래서 요청마다 짧게 싣는다. 근거(2026-09-29 A/B 3차, 20과제 x 판정관 3): 이 문장이 있으면 계획에 반영한 정답 기억 1.42 -> 1.82
 # (옛 구조 1.90 과 차이 없음, t=-0.36), 틀린 주장 0.28 -> 0.13. 그때는 시스템 프롬프트로 넣었다 - 훅 전달은 4차에서 잰다.
-HABIT = ('[기억] 계획을 세우기 전에, 세션 시작 때 떠오른 기억 지도에서 이번 작업 영역의 색인(lessons-index-*, gotchas-*, patterns-*)을 열어 본다. '
-         '이름을 모르는 함정은 색인에서만 발견된다.')
+# 문구는 lang.T[언어]['habit'] 에 있다(언어별)
 
 
 CONTROL_RE = re.compile(r'^/(?:brain(?::brain)?(?:\s+(?P<a>.*))?|claude-brain-(?P<b>[a-z]+)(?:\s+(?P<c>.*))?)$', re.I | re.S)
@@ -603,6 +606,7 @@ EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max', 'auto')
 
 
 def _run(args, timeout=4):
+    args = plat.argv(args)
     p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     return (p.stdout or p.stderr).strip()
 
@@ -620,11 +624,12 @@ def control(prompt):
     else:
         w = (m.group('a') or '').lower().split() or ['status']
     cmd, args = w[0], w[1:]
-    cfg = ['bash', os.path.join(HERE, 'config.sh')]
-    ctl = ['bash', os.path.join(HERE, 'hippocampus-ctl.sh')]
+    sh = 'bash'   # _run 과 plat.argv 가 Git Bash 와 / 경로로 바꾼다
+    cfg = [sh, os.path.join(HERE, 'config.sh')]
+    ctl = [sh, os.path.join(HERE, 'hippocampus-ctl.sh')]
     try:
         if cmd == 'status' and not args:
-            return _run(['bash', os.path.join(HERE, 'status.sh')])
+            return _run([sh, os.path.join(HERE, 'status.sh')])
         if cmd in ('on', 'off') and not args:
             return _run(cfg + [cmd]) or 'brain 설정을 바꿨다'
         if cmd == 'config':
@@ -645,7 +650,7 @@ def control(prompt):
             return _run(ctl + ['stop']) or '해마: 지금 항목이 끝나면 멈춘다'
         if cmd in ('app', 'editor') and not args:
             # 서버는 세션과 무관한 프로세스로 뜨고 editor.sh 는 주소만 알리고 바로 끝난다(훅 제한 5초)
-            return _run(['bash', os.path.join(HERE, 'editor.sh')], timeout=4) or '에디터를 띄우지 못했다: bash %s' % os.path.join(HERE, 'editor.sh')
+            return _run([sh, os.path.join(HERE, 'editor.sh')], timeout=4) or 'brain 앱을 띄우지 못했다: bash %s' % os.path.join(HERE, 'editor.sh')
         if cmd == 'results' and not args:
             return _run(ctl + ['results', '--brief'])
         if cmd == 'sleep' and not args:
@@ -653,8 +658,8 @@ def control(prompt):
             lg = os.path.join(CX, '.hippocampus', 'logs')
             os.makedirs(lg, exist_ok=True)
             with open(os.path.join(lg, 'sleep-manual.out'), 'a') as out:
-                subprocess.Popen(['bash', os.path.join(HERE, 'sleep.sh')], stdin=subprocess.DEVNULL, stdout=out,
-                                 stderr=subprocess.STDOUT, cwd=BRAIN, start_new_session=True)
+                subprocess.Popen(plat.argv([sh, os.path.join(HERE, 'sleep.sh')]), stdin=subprocess.DEVNULL, stdout=out,
+                                 stderr=subprocess.STDOUT, cwd=BRAIN, **plat.detach_kw())
             return '잠 주기를 시작했다 - 투입만 하고 곧 끝나며 처리는 해마가 뒤에서 한다. 결과: /claude-brain-status'
     except Exception as e:
         return 'brain 명령을 처리하지 못했다: %s' % e.__class__.__name__
@@ -708,9 +713,7 @@ def gate(d, sid, agent):
     ti = d.get('tool_input') or {}
     if tool == 'AskUserQuestion':
         if g.get('deny_ask') and not agent:
-            _GATE.update(permissionDecision='deny', permissionDecisionReason=(
-                '사용자 설정(brain 성격, 자율 3): 이 프로젝트에서는 선택지 질문 대신 합리적 기본값으로 진행하고, '
-                '가정한 것을 결과 끝에 적는다.'))
+            _GATE.update(permissionDecision='deny', permissionDecisionReason=L.t('gate_ask_deny'))
         return
     mp = state_file(sid, '')
     if tool == 'Bash':
@@ -720,8 +723,7 @@ def gate(d, sid, agent):
             st.setdefault('pt', {})['dirty'] = False
             save_state(mp, st)
         if g.get('risky_ask') and persona.is_risky(cmd):
-            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
-                'brain 성격(신중): 되돌리기 어려운 명령이다 - 무엇이 사라지거나 바뀌는지 확인하고 승인한다'))
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=L.t('gate_risky'))
         return
     p = ti.get('file_path') or ti.get('notebook_path') or ''
     if not persona.is_code(p) or p.startswith(TMP_PREFIX) or under(BRAIN, p):
@@ -735,13 +737,10 @@ def gate(d, sid, agent):
     if not agent:
         if g.get('first_edit_ask') and not pt.get('asked_first'):
             pt['asked_first'] = True
-            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
-                'brain 성격(신중): 이번 요청의 첫 파일 수정이다 - 계획을 보였는지 보고 승인한다'))
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=L.t('gate_first'))
         elif g.get('big_change_ask') and len(files) > g['big_change_ask'] and not pt.get('asked_big'):
             pt['asked_big'] = True
-            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
-                'brain 성격(신중): 이번 요청에서 바꾼 코드 파일이 %d개를 넘었다 - 지금까지 바꾼 것과 남은 계획을 보고 승인한다'
-                % g['big_change_ask']))
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=L.t('gate_big') % g['big_change_ask'])
     save_state(mp, st)
 
 
@@ -761,8 +760,7 @@ def verify_block(d, sid):
     pt['stop_blocked'] = True
     st['pt'] = pt
     save_state(mp, st)
-    return ('brain 성격(꼼꼼): 이번 요청에서 코드 파일 %d개를 고친 뒤 빌드나 테스트 명령이 없었다. 확인할 수단이 있으면 돌려 결과를 '
-            '보고에 적고, 없으면 왜 확인하지 못하는지 보고에 적고 끝낸다.' % len(pt.get('files') or []))
+    return L.t('gate_verify') % len(pt.get('files') or [])
 
 
 def hook():
@@ -784,7 +782,7 @@ def hook():
     agent = d.get('agent_id') or ''
     if not sid:
         return 0
-    cwd0 = (d.get('cwd') or '').rstrip('/')
+    cwd0 = plat.norm(d.get('cwd') or '')
     if under(BRAIN, cwd0) or under(os.path.realpath(BRAIN), cwd0):
         return 0   # hippocampus 자신의 세션 - 떠올리지도, 열람으로 세지도 않는다(망각 판정이 흐려진다)
     if agent and (d.get('agent_type') or '') in SUB_OFF:
@@ -812,7 +810,7 @@ def hook():
             return 0
         sc = scope(d.get('cwd') or '')
         if sc is not None:
-            text = HABIT
+            text = L.t('habit')
             pc = persona_of(sc[1])
             if pc:
                 st = load_state(sp)
@@ -826,8 +824,7 @@ def hook():
     if ev == 'SubagentStart':
         row = scope(d.get('cwd') or '', full=True)
         if row is not None:
-            emit(ev, '[기억] 작업 폴더는 %s 프로젝트다(%s). [기억] 으로 시작하는 메시지는 이 프로젝트에 대한 장기 기억이다'
-                     '(과거에 확인한 사실, 지금 코드와 다를 수 있다). 기억 저장소: %s' % (row[1], row[2], CX))
+            emit(ev, L.t('sub') % (row[1], row[2], CX))
         return 0
     if ev in ('Stop', 'PreCompact', 'SessionEnd'):
         if not d.get('stop_hook_active'):
@@ -850,7 +847,7 @@ def hook():
                 log({'t': int(t0), 'sid': sid, 'ev': 'open', 'body': os.path.relpath(rp, os.path.realpath(CX))})
             return 0
         # 임시 폴더라도 등록된 프로젝트 안의 파일이면 단서로 쓴다(프로젝트를 /tmp 아래에 둔 경우 - 2026-09-30 구현 시험에서 떠올림이 0 이 된 원인)
-        if (path.startswith(TMP_PREFIX) and scope(path) is None) or under(BRAIN, path):
+        if ((path.startswith(TMP_PREFIX) or (plat.WIN and under(_wintmp(), path))) and scope(path) is None) or under(BRAIN, path):
             if kind == 'read' or not new:
                 return 0
             path = None   # 작업 폴더의 eval 코드 같은 임시 파일: 파일 이름은 단서가 아니고 새로 부르는 API 만 본다
@@ -910,7 +907,7 @@ def rest(d, force):
         args.append('--force')
     os.makedirs(ACTIVE, exist_ok=True)
     with open(os.path.join(ACTIVE, 'awake.err'), 'ab') as err:
-        subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err, start_new_session=True, close_fds=True)
+        subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err, **plat.detach_kw())
 
 
 def probe(argv):
