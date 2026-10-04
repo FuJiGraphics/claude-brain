@@ -159,8 +159,12 @@ else:
     print('명령어: /claude-brain-* %d개 제거' % n_del)
 PY
 
-# 3. 밤 잠 예약 (macOS)
-LABEL="com.brain.sleep"
+# 3. 밤 잠 예약
+# 예약 이름은 기기 하나에 하나다 - 기본 설정 폴더(~/.claude)가 아니면 폴더별 꼬리표를 붙여 다른 설치의 예약을 덮거나 지우지 않는다
+LABEL="com.brain.sleep"; TN="brain-sleep"
+if [ "$CFG" != "$(cd "$HOME/.claude" 2>/dev/null && pwd)" ]; then
+  SUF="$(printf '%s' "$CFG" | nw_sha1 | cut -c1-8)"; LABEL="$LABEL.$SUF"; TN="$TN-$SUF"
+fi
 PL="$HOME/Library/LaunchAgents/$LABEL.plist"
 if [ "$(uname)" = "Darwin" ]; then
   if [ "$MODE" = "install" ] && [ "$SLEEP" = 1 ]; then
@@ -202,7 +206,6 @@ PY
   fi
 elif [ "$NW_WIN" = 1 ]; then
   # Windows - 작업 스케줄러에 매일 04:30 으로 건다. Git Bash 의 경로 변환이 /Create 같은 인자를 망가뜨리지 않게 끈다
-  TN="brain-sleep"
   if [ "$MODE" = "install" ] && [ "$SLEEP" = 1 ]; then
     BASHW="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash)"
     SLEEPW="$(nw_tool_path "$BRAIN/scripts/sleep.sh")"
