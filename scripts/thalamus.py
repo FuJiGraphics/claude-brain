@@ -11,6 +11,8 @@
   PostToolUseFailure Bash                             C# 컴파일 에러, 예외(첫 프로젝트 프레임)
   UserPromptSubmit                                    요청마다: 계획 전에 이번 작업 영역의 색인을 열어 보는 습관 한 줄(HABIT)
   SubagentStart                                       새 에이전트: 작업 폴더의 프로젝트와 '[기억] 은 장기 기억' 한 줄
+  (성격)                                              persona/<슬러그>.json 이 있으면 SessionStart 에 작업 방식 문장, UserPromptSubmit 에
+                                                      상기 한 줄, PreToolUse(AskUserQuestion 포함) 관문, Stop 검증 검사를 더한다(persona.py)
   Stop, PreCompact, SessionEnd                        쉬는 순간: 새로 쌓인 대화록 구간이 두드러지면 깨어 있는 중 재생(replay.py awake)을
                                                       백그라운드로 띄운다 - 해마가 몇 분 안에 새기고, 그 뒤 모든 세션에서 떠오른다
 명령행: thalamus.py probe --cwd <경로> --event <read|edit|bash|error|orient> -- <경로 또는 글>
@@ -607,7 +609,7 @@ def _run(args, timeout=4):
 
 def control(prompt):
     """[/claude-brain-<명령> 또는 /brain <명령>] - 스크립트만 돌리면 되는 명령을 훅이 바로 처리하고 결과 글을 돌려준다. 그 밖이면 None
-    - 바로 처리: status(인자 없는 /brain 포함), on, off, config [프리셋], model <이름>, effort <값>, stop, sleep, results
+    - 바로 처리: status(인자 없는 /brain 포함), on, off, config [프리셋], model <이름>, effort <값>, stop, sleep, results, app(옛 이름 editor)
     - None(모델이 처리): recall, remember, 모르는 명령 - 명령 파일이나 SKILL.md 가 받는다
     """
     m = CONTROL_RE.match(prompt.strip())
@@ -641,6 +643,9 @@ def control(prompt):
             return '사용법: /claude-brain-effort low | medium | high | xhigh | max | auto'
         if cmd == 'stop' and not args:
             return _run(ctl + ['stop']) or '해마: 지금 항목이 끝나면 멈춘다'
+        if cmd in ('app', 'editor') and not args:
+            # 서버는 세션과 무관한 프로세스로 뜨고 editor.sh 는 주소만 알리고 바로 끝난다(훅 제한 5초)
+            return _run(['bash', os.path.join(HERE, 'editor.sh')], timeout=4) or '에디터를 띄우지 못했다: bash %s' % os.path.join(HERE, 'editor.sh')
         if cmd == 'results' and not args:
             return _run(ctl + ['results', '--brief'])
         if cmd == 'sleep' and not args:
@@ -665,8 +670,99 @@ def enabled():
         return True
 
 
+_GATE = {}   # PreToolUse 관문 결정(성격) - emit 이 떠올림과 함께 싣고, 떠올림이 없으면 main 이 따로 낸다
+
+
 def emit(ev, text):
-    print(json.dumps({'hookSpecificOutput': {'hookEventName': ev, 'additionalContext': text}}, ensure_ascii=False))
+    o = {'hookEventName': ev, 'additionalContext': text}
+    if _GATE:
+        o.update(_GATE)
+        _GATE.clear()
+    print(json.dumps({'hookSpecificOutput': o}, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------- 성격 (persona.py)
+def persona_of(slug):
+    """[그 프로젝트의 성격 컴파일 결과] 없거나 꺼졌거나 읽기 오류면 None - 성격은 떠올림을 막지 않는다"""
+    try:
+        import persona
+        return persona.compiled(slug)
+    except Exception:
+        return None
+
+
+def gate(d, sid, agent):
+    """[성격 관문 - PreToolUse]
+    - 위험 명령(risky_ask), 요청의 첫 수정(first_edit_ask), 큰 변경(big_change_ask)은 사용자 확인(ask), 자율 3(deny_ask)은 질문 도구를 막는다
+    - 코드 수정과 검증 명령을 세션 상태(pt)에 적는다 - Stop 검증 검사(verify_block)가 읽는다. 서브에이전트의 수정,검증도 메인 상태에 센다
+    """
+    sc = scope(d.get('cwd') or '')
+    if sc is None:
+        return
+    pc = persona_of(sc[1])
+    if not pc or not pc['gates']:
+        return
+    import persona
+    g = pc['gates']
+    tool = d.get('tool_name') or ''
+    ti = d.get('tool_input') or {}
+    if tool == 'AskUserQuestion':
+        if g.get('deny_ask') and not agent:
+            _GATE.update(permissionDecision='deny', permissionDecisionReason=(
+                '사용자 설정(brain 성격, 자율 3): 이 프로젝트에서는 선택지 질문 대신 합리적 기본값으로 진행하고, '
+                '가정한 것을 결과 끝에 적는다.'))
+        return
+    mp = state_file(sid, '')
+    if tool == 'Bash':
+        cmd = ti.get('command') or ''
+        if g.get('verify_stop') and persona.is_verify(cmd, g.get('verify_re')):
+            st = load_state(mp)
+            st.setdefault('pt', {})['dirty'] = False
+            save_state(mp, st)
+        if g.get('risky_ask') and persona.is_risky(cmd):
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
+                'brain 성격(신중): 되돌리기 어려운 명령이다 - 무엇이 사라지거나 바뀌는지 확인하고 승인한다'))
+        return
+    p = ti.get('file_path') or ti.get('notebook_path') or ''
+    if not persona.is_code(p) or p.startswith(TMP_PREFIX) or under(BRAIN, p):
+        return
+    st = load_state(mp)
+    pt = st.setdefault('pt', {})
+    files = pt.setdefault('files', [])
+    if p not in files:
+        files.append(p)
+    pt['dirty'] = True
+    if not agent:
+        if g.get('first_edit_ask') and not pt.get('asked_first'):
+            pt['asked_first'] = True
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
+                'brain 성격(신중): 이번 요청의 첫 파일 수정이다 - 계획을 보였는지 보고 승인한다'))
+        elif g.get('big_change_ask') and len(files) > g['big_change_ask'] and not pt.get('asked_big'):
+            pt['asked_big'] = True
+            _GATE.update(permissionDecision='ask', permissionDecisionReason=(
+                'brain 성격(신중): 이번 요청에서 바꾼 코드 파일이 %d개를 넘었다 - 지금까지 바꾼 것과 남은 계획을 보고 승인한다'
+                % g['big_change_ask']))
+    save_state(mp, st)
+
+
+def verify_block(d, sid):
+    """[성격 검증 검사 - Stop] 꼼꼼 3: 이번 요청에서 코드를 고친 뒤 검증 명령이 없으면 한 번 되돌려 보낸다. 되돌릴 이유 글 또는 None"""
+    sc = scope(d.get('cwd') or '')
+    if sc is None:
+        return None
+    pc = persona_of(sc[1])
+    if not pc or not pc['gates'].get('verify_stop'):
+        return None
+    mp = state_file(sid, '')
+    st = load_state(mp)
+    pt = st.get('pt') or {}
+    if not pt.get('dirty') or pt.get('stop_blocked'):
+        return None
+    pt['stop_blocked'] = True
+    st['pt'] = pt
+    save_state(mp, st)
+    return ('brain 성격(꼼꼼): 이번 요청에서 코드 파일 %d개를 고친 뒤 빌드나 테스트 명령이 없었다. 확인할 수단이 있으면 돌려 결과를 '
+            '보고에 적고, 없으면 왜 확인하지 못하는지 보고에 적고 끝낸다.' % len(pt.get('files') or []))
 
 
 def hook():
@@ -705,15 +801,27 @@ def hook():
         row = scope(d.get('cwd') or '', full=True)
         if row is not None:
             text = orient(row)
+            pc = persona_of(row[1])
+            if pc and pc['session']:
+                text += '\n' + pc['session']
             log({'t': int(t0), 'sid': sid, 'ev': 'orient', 'slug': row[1], 'chars': len(text), 'ms': int((time.time() - t0) * 1000)})
             emit(ev, text)
         return 0
     if ev == 'UserPromptSubmit':
         if agent:
             return 0
-        if scope(d.get('cwd') or '') is not None:
-            log({'t': int(t0), 'sid': sid, 'ev': 'habit', 'chars': len(HABIT), 'ms': int((time.time() - t0) * 1000)})
-            emit(ev, HABIT)
+        sc = scope(d.get('cwd') or '')
+        if sc is not None:
+            text = HABIT
+            pc = persona_of(sc[1])
+            if pc:
+                st = load_state(sp)
+                st['pt'] = {}   # 요청마다 관문 상태(수정한 파일, 검증 여부, 이미 물었는지)를 새로 센다
+                save_state(sp, st)
+                if pc['turn']:
+                    text += '\n' + pc['turn']
+            log({'t': int(t0), 'sid': sid, 'ev': 'habit', 'chars': len(text), 'ms': int((time.time() - t0) * 1000)})
+            emit(ev, text)
         return 0
     if ev == 'SubagentStart':
         row = scope(d.get('cwd') or '', full=True)
@@ -723,8 +831,15 @@ def hook():
         return 0
     if ev in ('Stop', 'PreCompact', 'SessionEnd'):
         if not d.get('stop_hook_active'):
+            blk = verify_block(d, sid) if ev == 'Stop' else None
             rest(d, ev != 'Stop')
+            if blk:
+                print(json.dumps({'decision': 'block', 'reason': blk}, ensure_ascii=False))
         return 0
+    if ev == 'PreToolUse':
+        gate(d, sid, agent)
+        if (d.get('tool_name') or '') == 'AskUserQuestion':
+            return 0
     kind, text, path, new, old = classify(d)
     if kind is None:
         return 0
@@ -830,9 +945,12 @@ def main():
             print('\t'.join(sc))
         return 0
     try:
-        return hook()
+        r = hook()
     except Exception:
-        return 0
+        r = 0
+    if _GATE:
+        print(json.dumps({'hookSpecificOutput': dict(_GATE, hookEventName='PreToolUse')}, ensure_ascii=False))
+    return r
 
 
 if __name__ == '__main__':

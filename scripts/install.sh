@@ -68,7 +68,7 @@ for ev in list(hooks):
     if not groups:
         del hooks[ev]
 if mode == 'install':
-    want = [('SessionStart', '*'), ('UserPromptSubmit', None), ('PreToolUse', 'Edit|Write|MultiEdit|NotebookEdit|Bash'), ('PostToolUse', 'Read'),
+    want = [('SessionStart', '*'), ('UserPromptSubmit', None), ('PreToolUse', 'Edit|Write|MultiEdit|NotebookEdit|Bash|AskUserQuestion'), ('PostToolUse', 'Read'),
             ('PostToolUseFailure', 'Bash'), ('SubagentStart', None), ('Stop', None), ('PreCompact', None), ('SessionEnd', None)]
     for ev, matcher in want:
         g = {'hooks': [{'type': 'command', 'command': cmd, 'timeout': 5}]}
