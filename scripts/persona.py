@@ -171,9 +171,15 @@ def load(slug):
     try:
         with open(path_of(slug), encoding='utf-8') as f:
             d = json.load(f)
-        return d if isinstance(d, dict) else None
     except (IOError, OSError, ValueError):
         return None
+    if not isinstance(d, dict):
+        return None
+    g = normalize(d)
+    for k in ('slug', 'updated'):
+        if isinstance(d.get(k), str):
+            g[k] = d[k]
+    return g
 
 
 def save(slug, graph):
@@ -209,24 +215,27 @@ def from_breed(key, lang=None):
 def normalize(graph):
     """[그래프 정리] 모르는 성향,상황, 끊긴 연결, 잘못된 강도를 걷어 낸다"""
     g = graph if isinstance(graph, dict) else {}
+    _list = lambda v: v if isinstance(v, list) else []
+    _in = lambda v, table: isinstance(v, str) and v in table
+    _num = lambda v: float(v) if isinstance(v, (int, float)) and abs(v) < 1e6 else 0   # NaN, inf 는 0 (브라우저 JSON 이 못 읽는다)
     nodes, ids = [], {}
-    for n in g.get('nodes') or []:
+    for n in _list(g.get('nodes')):
         if not isinstance(n, dict) or not n.get('id'):
             continue
         nid = str(n['id'])[:40]
         x, y = n.get('x', 0), n.get('y', 0)
-        pos = {'x': float(x) if isinstance(x, (int, float)) else 0, 'y': float(y) if isinstance(y, (int, float)) else 0}
-        if n.get('kind') == 'trait' and n.get('trait') in TRAITS:
+        pos = {'x': _num(x), 'y': _num(y)}
+        if n.get('kind') == 'trait' and _in(n.get('trait'), TRAITS):
             lv = n.get('level')
-            lv = lv if lv in (1, 2, 3) else 2
+            lv = lv if type(lv) is int and lv in (1, 2, 3) else 2
             nodes.append(dict(pos, id=nid, kind='trait', trait=n['trait'], level=lv))
-        elif n.get('kind') == 'situation' and n.get('situation') in SITUATIONS:
+        elif n.get('kind') == 'situation' and _in(n.get('situation'), SITUATIONS):
             nodes.append(dict(pos, id=nid, kind='situation', situation=n['situation']))
         else:
             continue
         ids[nid] = nodes[-1]
     edges, seen = [], set()
-    for e in g.get('edges') or []:
+    for e in _list(g.get('edges')):
         if not isinstance(e, dict):
             continue
         a, b = str(e.get('from')), str(e.get('to'))
@@ -239,7 +248,7 @@ def normalize(graph):
         re.compile(vr or VERIFY_DEFAULT)
     except re.error:
         vr = ''
-    return {'version': 1, 'breed': g.get('breed') if g.get('breed') in BREEDS else '',
+    return {'version': 1, 'breed': g.get('breed') if _in(g.get('breed'), BREEDS) else '',
             'name': str(g.get('name') or '')[:40], 'enabled': g.get('enabled') is not False,
             'nodes': nodes, 'edges': edges, 'verify_re': vr[:400],
             'big_files': bf if isinstance(bf, int) and 2 <= bf <= 50 else 5}
