@@ -669,9 +669,9 @@ def control(prompt):
 def enabled():
     """[brain 이 켜져 있나] - /brain off 가 .active/config 에 enabled=0 을 남긴다. 파일이 없으면 켜짐"""
     try:
-        with open(os.path.join(BRAIN, '.active', 'config'), encoding='utf-8') as f:
+        with open(os.path.join(BRAIN, '.active', 'config'), encoding='utf-8', errors='replace') as f:
             return not any(l.strip() == 'enabled=0' for l in f)
-    except OSError:
+    except (OSError, ValueError):   # 깨진 설정 파일이면 켜진 것으로 본다(말없이 꺼지지 않게)
         return True
 
 

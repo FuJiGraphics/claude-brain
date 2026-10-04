@@ -95,13 +95,13 @@ BRIEF = ('\n## 기억 언어\n\n- 기억 본문과 인덱스 줄은 대화에서
 def current():
     """[지금 언어] .active/config 의 lang=, 없으면 ko"""
     try:
-        with open(os.path.join(BRAIN, '.active', 'config'), encoding='utf-8') as f:
+        with open(os.path.join(BRAIN, '.active', 'config'), encoding='utf-8', errors='replace') as f:
             for line in f:
                 if line.startswith('lang='):
                     v = line.strip()[5:]
                     if v in LANGS:
                         return v
-    except OSError:
+    except (OSError, ValueError):
         pass
     return 'ko'
 
