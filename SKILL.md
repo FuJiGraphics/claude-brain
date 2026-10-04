@@ -37,6 +37,9 @@ disable-model-invocation: true
 | `recall <이름>...` | 현재 폴더에서 `bash <brain>/scripts/recall.sh <이름>...`. 찾은 기억의 요지와 경로를 알려 준다 | 모델 |
 | `remember <내용>` | `bash <brain>/scripts/remember.sh "<내용> - 근거: <file:line 또는 사용자 발화>"` - 해마 큐에 넣고 끝난다. 근거는 대화에서 찾아 붙이고 사용자에게 되묻지 않는다 | 모델 |
 
+언어: `bash <brain>/scripts/config.sh lang <ko|en|ja|zh>` (앱 설정의 언어와 같다). 앱 화면, 세션에 들어가는 `[기억]` 문구, 성격 문장, 앱의 Haiku 답이 이 언어를 따르고, 기억은 해마가 대화 언어로 쓴다. 설치가 OS 언어로 처음 값을 정한다.
+OS: macOS, Linux, Windows(Git Bash, beta). OS 차이(경로 표기, Git Bash 찾기, 프로세스 분리)는 `scripts/plat.py` 가 맡는다.
+
 ## 지키는 것
 
 - cortex 쓰기는 hippocampus 만 한다(여기서도 직접 고치지 않는다). 사용자의 요청은 `remember.sh` 로 넘긴다.
