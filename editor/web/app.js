@@ -422,14 +422,14 @@ async function pageHome(alive) {
       <div class="logo">${pet(ov.config.enabled ? 'happy' : 'off', 'adult')}<b>brain</b></div>
       <a class="pill${h.alive ? ' busy' : ''}" href="#/journal" data-tip="${esc(t('hippo.tip'))}"><span class="dot"></span>${t(h.alive ? 'hippo.busy' : 'hippo.idle')}${ov.queue ? ` ${ov.queue}` : ''}</a>
     </div>
-    <div class="hello">${ov.config.enabled ? t('home.hello', { n: ov.projects.length }) : t('home.off')}</div>
+    <div class="hello">${!ov.config.enabled ? t('home.off') : ov.projects.length ? t('home.hello', { n: ov.projects.length }) : t('home.hello0')}</div>
     <p class="sub">${ov.age != null ? t('home.age', { n: ov.age + 1 }) : ''}${t('home.total', { n: num(total) })}</p>
     ${care.length ? `<div class="h2" style="margin-top:4px">${t('home.care')}</div><div class="care">${care.map((c) => `
       ${c.href ? `<a class="care-item" href="${c.href}">` : `<button class="care-item" data-act="${c.act}">`}
         <span class="ce" style="background:${c.bg}">${c.e}</span><span><span class="ct">${esc(c.t)}</span><br><span class="cd">${esc(c.d)}</span></span><span class="go">${esc(c.go)} ›</span>
       ${c.href ? '</a>' : '</button>'}`).join('')}</div>` : ''}
     <div class="h2" style="margin-top:4px">${t('home.mine')} <small>${t('home.mine.hint')}</small></div>
-    <div class="pets">${tiles || `<div class="empty">${t('home.none')}</div>`}</div>
+    <div class="pets">${tiles || `<div class="empty" style="grid-column:1/-1"><span class="big">🥚</span>${t('home.none')}<br><span class="hint">${t('home.none.hint')}</span></div>`}</div>
     <div class="h2">${t('home.shared')} <small>${t('home.shared.hint')}</small></div>
     <div class="shared">${shared}</div>`;
   $$('.care-item[data-act]').forEach((b) => b.addEventListener('click', () => doCare(b.dataset.act, b)));
