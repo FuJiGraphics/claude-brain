@@ -36,7 +36,7 @@ show() {
   local on m e
   on="$(get enabled)"; m="$(get hippocampus_model)"; e="$(get hippocampus_effort)"
   if [ "${on:-1}" = 0 ]; then echo "brain: 꺼짐"; else echo "brain: 켜짐"; fi
-  echo "해마: $(name_of "${m:-claude-sonnet-5-5}"), effort ${e:-high}"
+  echo "해마: $(name_of "${m:-claude-sonnet-5-5}"), effort ${e:-medium}"
   echo "언어: $(nw_py "$BRAIN/scripts/lang.py" get)"
 }
 stop_daemon() {
