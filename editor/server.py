@@ -461,6 +461,20 @@ def json_in(text):
     return json.loads(text[a:b + 1])
 
 
+def haiku_json(prompt, system, timeout=120):
+    """[Haiku 에 JSON 받기] 가끔 따옴표,줄바꿈이 깨진 JSON 이 온다 - 한 번 다시 묻는다. 두 번째도 깨지면 (None, 원문)"""
+    raw = haiku(prompt, system, timeout)
+    try:
+        return json_in(raw), raw
+    except ValueError:
+        raw = haiku(prompt + '\n\nYour previous reply was not valid JSON. Reply again with valid JSON only (escape quotes and newlines).',
+                    system, timeout)
+        try:
+            return json_in(raw), raw
+        except ValueError:
+            return None, raw
+
+
 def _topic_prompt(layer, mems, lang='ko'):
     name = layer.split('/', 1)[1] if '/' in layer else 'shared'
     rows, size = [], 0
@@ -486,7 +500,9 @@ def _topic_prompt(layer, mems, lang='ko'):
 
 def _topic_job(layer, mems, h, lang='ko'):
     try:
-        d = json_in(haiku(_topic_prompt(layer, mems, lang), 'You group developer notes into topics and answer with JSON only.', timeout=180))
+        d, raw = haiku_json(_topic_prompt(layer, mems, lang), 'You group developer notes into topics and answer with JSON only.', timeout=180)
+        if d is None:
+            raise ValueError('주제 응답이 JSON 이 아니다')
         topics = []
         for t in d.get('topics') or []:
             ids = [i for i in t.get('ids') or [] if isinstance(i, int) and 1 <= i <= len(mems)]
@@ -591,7 +607,9 @@ def explain(rel, lang='ko'):
               'At most 3 terms, empty array if none. Mention file paths or identifiers only when needed.\n\n--- note (%s)\n%s') % (
         LANG.NAMES[lang], TONE[lang], 'max 45 characters' if cjk else 'max 90 characters', 'max 40 characters' if cjk else 'max 80 characters',
         'max 25 characters' if cjk else 'max 50 characters', m['path'], m['text'][:6000])
-    d = json_in(haiku(prompt, EXPLAIN_SYS, timeout=90))
+    d, raw = haiku_json(prompt, EXPLAIN_SYS, timeout=90)
+    if d is None:
+        raise ValueError('풀이 응답이 JSON 이 아니다')
     out = {'summary': str(d.get('summary') or '')[:160], 'why': str(d.get('why') or '')[:500], 'when': str(d.get('when') or '')[:300],
            'check': str(d.get('check') or '')[:160],
            'terms': [{'word': str(t.get('word', ''))[:40], 'meaning': str(t.get('meaning', ''))[:100]} for t in (d.get('terms') or [])[:3] if isinstance(t, dict)]}
@@ -725,7 +743,13 @@ def ask(layer, q, history, lang='ko'):
     hist = '\n'.join('User: %s\nBrain: %s' % (h.get('q', '')[:200], h.get('a', '')[:300]) for h in (history or [])[-3:])
     prompt = ('%s\n\n--- memories\n%s\n\n--- question\n%s') % (('--- earlier conversation\n' + hist) if hist else '', '\n\n'.join(rows) or '(no related memories)', q)
     name = layer.split('/', 1)[1] if '/' in layer else 'shared'
-    r = json_in(haiku(prompt, ASK_SYS % (name, LANG.NAMES[lang], TONE[lang]), timeout=90))
+    r, raw = haiku_json(prompt, ASK_SYS % (name, LANG.NAMES[lang], TONE[lang]), timeout=90)
+    if r is None:   # 두 번 다 JSON 이 깨졌다 - 답 문장만이라도 살린다
+        m = re.search(r'"answer"\s*:\s*"(.*?)"\s*,\s*"refs"\s*:\s*\[([^\]]*)\]', raw, re.S)
+        if m:
+            r = {'answer': m.group(1).replace('\\n', '\n').replace('\\"', '"'), 'refs': [int(x) for x in re.findall(r'\d+', m.group(2))]}
+        else:
+            r = {'answer': re.sub(r'^```\w*|```$', '', raw.strip()).strip(), 'refs': []}
     refs = []
     for k in r.get('refs') or []:
         if isinstance(k, int) and 1 <= k <= len(top):
