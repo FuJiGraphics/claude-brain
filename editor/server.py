@@ -35,8 +35,17 @@ PROMO = os.path.join(BRAIN, 'promo')
 WEB = os.path.join(HERE, 'web')
 STATE = os.path.join(ACTIVE, 'editor.json')
 sys.path.insert(0, SCRIPTS)
+import lang as LANG  # noqa: E402
+import plat  # noqa: E402  OS 차이(경로, bash, 프로세스) - macOS, Linux, Windows
 import persona  # noqa: E402
 import slices  # noqa: E402
+
+TONE = {'ko': 'polite 해요체', 'en': 'friendly, plain English', 'ja': 'polite です/ます style', 'zh': 'friendly, plain Simplified Chinese'}
+
+
+def lang_of(v):
+    """[요청 언어] 앱이 보낸 값, 없으면 brain 언어 설정"""
+    return v if v in LANG.LANGS else config()['lang']   # 서버가 바라보는 설정(데모면 데모 설정)
 
 IDLE_EXIT = 2 * 3600
 DRYRUN = os.environ.get('BRAIN_EDITOR_DRYRUN') == '1'   # 시험용 - 기억,설정,큐를 건드리는 동작을 흉내만 낸다
@@ -89,9 +98,9 @@ def registry():
         if not line.startswith('|'):
             continue
         c = [x.strip().strip('`') for x in line.strip().strip('|').split('|')]
-        if len(c) >= 3 and c[0].startswith('/'):
+        if len(c) >= 3 and plat.is_abs(c[0]):
             c += [''] * (5 - len(c))
-            rows.append({'root': c[0].rstrip('/'), 'slug': c[1], 'stack': c[2], 'ver': c[3],
+            rows.append({'root': plat.norm(c[0]), 'slug': c[1], 'stack': c[2], 'ver': c[3],
                          'note': re.sub(r'\s+', ' ', '|'.join(c[4:]).replace('**', '')).strip()})
     return rows
 
@@ -198,12 +207,7 @@ def layer_data(layer):
 
 # ---------------------------------------------------------------- 해마, 잠, 설정
 def pid_alive(pid):
-    try:
-        pid = int(pid)
-        os.kill(pid, 0)
-        return True
-    except (ValueError, OSError, TypeError):
-        return False
+    return plat.pid_alive(pid)   # Windows 에서 os.kill(pid, 0) 은 그 프로세스를 끝내 버린다
 
 
 def hippo():
@@ -238,7 +242,8 @@ def config():
             k, v = line.split('=', 1)
             c[k.strip()] = v.strip()
     last = _read(os.path.join(HC, 'sleep', 'last')).strip()
-    return {'enabled': c.get('enabled', '1') != '0', 'model': c.get('hippocampus_model', 'claude-sonnet-5-5'),
+    return {'enabled': c.get('enabled', '1') != '0', 'lang': c.get('lang') if c.get('lang') in LANG.LANGS else 'ko',
+            'model': c.get('hippocampus_model', 'claude-sonnet-5-5'),
             'effort': c.get('hippocampus_effort', 'medium'), 'born': _read(os.path.join(ACTIVE, 'brain-born')).strip(),
             'last_sleep': int(last) if last.isdigit() else 0,
             'sleep_summary': _read(os.path.join(HC, 'sleep', 'last-summary.txt')).strip()[:300]}
@@ -254,7 +259,8 @@ def stage_of(n):
         if n >= s[0]:
             cur = s
     nxt = next((s for s in STAGES if s[0] > n), None)
-    return {'key': cur[1], 'name': cur[2], 'next': nxt[0] if nxt else None, 'next_name': nxt[2] if nxt else None}
+    return {'key': cur[1], 'name': cur[2], 'next': nxt[0] if nxt else None, 'next_name': nxt[2] if nxt else None,
+            'next_key': nxt[1] if nxt else None}
 
 
 def summarize(layer, slug=None, hp=None, cfg=None):
@@ -288,28 +294,29 @@ def summarize(layer, slug=None, hp=None, cfg=None):
     busy = busy or bool(slug and hp['alive'] and slug in hp['current'])
     recent_fail = [r for r in hp['results'][-30:] if r['slug'] == slug and r['status'] in ('failed', 'denied', 'timeout')] if slug else []
     sleepy = cfg['last_sleep'] and now - cfg['last_sleep'] > 36 * 3600
+    # 기분은 키와 숫자만 보낸다 - 문구는 화면이 언어별로 만든다
     if not cfg['enabled']:
-        mood = ('off', '꺼져 있어요', 'brain 이 꺼져 있어 떠올리지도 배우지도 않아요')
+        mood = 'off'
     elif not mems:
-        mood = ('egg', '알 속에서 꿈틀', '아직 기억이 없어요. 이 프로젝트에서 일하면 깨어나요')
+        mood = 'egg'
     elif cap > 1.0:
-        mood = ('overload', '머리가 꽉 찼어요', '기억 지도가 기준을 넘었어요. 정리하면 떠올림이 다시 정확해져요')
+        mood = 'overload'
     elif recent_fail:
-        mood = ('sick', '배탈 났어요', '최근 해마 작업 %d건이 실패했어요' % len(recent_fail))
+        mood = 'sick'
     elif busy:
-        mood = ('study', '공부 중', '해마가 이 프로젝트 기억을 새기고 있어요')
+        mood = 'study'
     elif sleepy:
-        mood = ('sleepy', '졸려요', '마지막 잠이 하루 반 넘게 지났어요')
+        mood = 'sleepy'
     elif now - (last_learn or mig) > 14 * 86400:
-        mood = ('bored', '심심해요', '2주 넘게 새로 배운 게 없어요')
+        mood = 'bored'
     elif cap > 0.85:
-        mood = ('full', '배불러요', '곧 정리가 필요해요')
+        mood = 'full'
     else:
-        mood = ('happy', '쌩쌩해요', '잘 배우고 잘 떠올리고 있어요')
+        mood = 'happy'
     return {'layer': layer, 'count': len(mems), 'regions': regions, 'capacity': round(cap, 3), 'capacity_parts': parts[:8],
             'index_chars': total_chars, 'learned_week': len(week), 'last_learn': last_learn, 'usage': usage,
             'dormant': len(d['dormant']), 'stage': stage_of(len(mems)),
-            'mood': {'key': mood[0], 'name': mood[1], 'why': mood[2]}, 'busy': busy}
+            'mood': {'key': mood, 'n': len(recent_fail)}, 'busy': busy}
 
 
 def overview():
@@ -396,8 +403,8 @@ _TOPIC_JOBS = {}
 _TOPIC_LOCK = threading.Lock()
 
 
-def _topics_path(layer):
-    return os.path.join(TOPICS_DIR, re.sub(r'[^A-Za-z0-9_.-]', '_', layer) + '.json')
+def _topics_path(layer, lang='ko'):
+    return os.path.join(TOPICS_DIR, re.sub(r'[^A-Za-z0-9_.-]', '_', layer) + ('' if lang == 'ko' else '.' + lang) + '.json')
 
 
 def _mem_hash(mems):
@@ -410,7 +417,8 @@ def _claude_bin():
     c = shutil.which('claude')
     if c:
         return c
-    for p in ('~/.local/bin/claude', '~/.claude/local/claude', '/opt/homebrew/bin/claude', '/usr/local/bin/claude'):
+    for p in ('~/.local/bin/claude', '~/.local/bin/claude.exe', '~/.claude/local/claude', '~/AppData/Roaming/npm/claude.cmd',
+              '/opt/homebrew/bin/claude', '/usr/local/bin/claude'):
         p = os.path.expanduser(p)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
@@ -434,12 +442,13 @@ def haiku(prompt, system, timeout=120):
               'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_CODE_ENTRYPOINT'):
         env.pop(k, None)
     env['MAX_THINKING_TOKENS'] = '0'   # 요약,짧은 답에는 생각이 필요 없다 - 끄면 38초 -> 6초, 비용 6분의 1 (2026-10-05 실측)
-    args = [_claude_bin(), '-p', prompt, '--model', TOPIC_MODEL, '--effort', 'low', '--tools', '', '--system-prompt', system,
+    args = [_claude_bin(), '-p', '--model', TOPIC_MODEL, '--effort', 'low', '--tools', '', '--system-prompt', system,
             '--disable-slash-commands', '--strict-mcp-config', '--output-format', 'json', '--max-turns', '1', '--name', 'brain-app']
     po = _plugins_off()
     if po:
         args += ['--settings', po]
-    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=CX, env=env, stdin=subprocess.DEVNULL)
+    p = subprocess.run(args, input=prompt, capture_output=True, text=True, timeout=timeout, cwd=CX, env=env,
+                       encoding='utf-8', errors='replace')   # 프롬프트는 stdin 으로 - Windows 명령줄은 3.2만 자가 상한이다
     if p.returncode != 0 and not p.stdout.strip():
         raise RuntimeError((p.stderr or 'claude 종료 코드 %d' % p.returncode).strip()[:300])
     return json.loads(p.stdout or '{}').get('result') or ''
@@ -452,8 +461,8 @@ def json_in(text):
     return json.loads(text[a:b + 1])
 
 
-def _topic_prompt(layer, mems):
-    name = layer.split('/', 1)[1] if '/' in layer else '공용'
+def _topic_prompt(layer, mems, lang='ko'):
+    name = layer.split('/', 1)[1] if '/' in layer else 'shared'
     rows, size = [], 0
     for i, m in enumerate(mems, 1):
         r = '%d. %s | %s' % (i, m['title'][:120], m['line'][:160])
@@ -461,47 +470,53 @@ def _topic_prompt(layer, mems):
         if size > TOPIC_INPUT:
             break
         rows.append(r)
-    return ('아래는 "%s" 의 장기 기억 목록이다(번호. 제목 | 색인 요지). 이 기억들이 주로 무엇을 중요하게 다루는지 주제 %s개로 묶어라. 주제 하나에는 기억이 되도록 2개 이상 들어간다.\n'
-            '- label: 한눈에 알아보는 짧은 한국어 명사구 4~14자. 예: "유니티 스크립트 구조", "ECS 구조", "원본 충실 이식", "배포 절차", "판정 타이밍". '
-            '파일 이름이나 영어 슬러그를 그대로 쓰지 않는다. Unity, ECS, UGUI, FMOD 같은 고유 기술 이름은 그대로 쓴다.\n'
-            '- emoji: 주제에 맞는 이모지 하나\n'
-            '- ids: 그 주제에 속하는 기억 번호. 기억 하나는 가장 맞는 주제 하나에만 넣는다\n'
-            '- 기억이 많은 주제부터 적는다\n'
-            '- motto: 이 뇌가 제일 중요하게 여기는 것을 뇌 자신이 말하듯 한 문장, 해요체, 28자 이내. 예: "원본 그대로 옮기는 게 제일 중요해요"\n'
-            'JSON 만 출력한다: {"motto":"...","topics":[{"label":"...","emoji":"...","ids":[1,2]}]}\n\n%s') % (
-        name, '2~3' if len(rows) < 8 else '3~5' if len(rows) < 25 else '6~8', '\n'.join(rows))
+    n = '2-3' if len(rows) < 8 else '3-5' if len(rows) < 25 else '6-8'
+    short = 'a short noun phrase of 2-5 words' if lang == 'en' else 'a short noun phrase of 4-14 characters'
+    return ('Below is the long-term memory list of "%s" (number. title | index gist). Group these memories into %s topics that show what this brain '
+            'cares about most. Each topic should hold 2 or more memories.\n'
+            '- label: %s in %s, readable at a glance (e.g. "Unity script structure", "ECS structure", "faithful porting", "deploy steps"). '
+            'Do not copy file names or slugs. Keep proper tech names like Unity, ECS, UGUI as is.\n'
+            '- emoji: one emoji that fits the topic\n'
+            '- ids: memory numbers in that topic; each memory goes into only its best topic\n'
+            '- order topics from most memories to fewest\n'
+            '- motto: one sentence the brain itself says about what it values most, first person, %s, %s\n'
+            'Output JSON only: {"motto":"...","topics":[{"label":"...","emoji":"...","ids":[1,2]}]}\n\n%s') % (
+        name, n, short, LANG.NAMES[lang], TONE[lang], 'max 60 characters' if lang == 'en' else 'max 28 characters', '\n'.join(rows))
 
 
-def _topic_job(layer, mems, h):
+def _topic_job(layer, mems, h, lang='ko'):
     try:
-        d = json_in(haiku(_topic_prompt(layer, mems), '너는 개발 메모 목록을 주제로 묶어 JSON 으로만 답하는 도우미다.', timeout=180))
+        d = json_in(haiku(_topic_prompt(layer, mems, lang), 'You group developer notes into topics and answer with JSON only.', timeout=180))
         topics = []
         for t in d.get('topics') or []:
             ids = [i for i in t.get('ids') or [] if isinstance(i, int) and 1 <= i <= len(mems)]
             if t.get('label') and ids:
-                topics.append({'label': str(t['label'])[:20], 'emoji': str(t.get('emoji') or '💭')[:4],
+                topics.append({'label': str(t['label'])[:40 if lang == 'en' else 24], 'emoji': str(t.get('emoji') or '💭')[:4],
                                'paths': [mems[i - 1]['path'] for i in ids]})
-        out = {'layer': layer, 'hash': h, 'generated': int(time.time()), 'model': TOPIC_MODEL,
-               'motto': str(d.get('motto') or '')[:40], 'topics': topics[:8]}
+        out = {'layer': layer, 'lang': lang, 'hash': h, 'generated': int(time.time()), 'model': TOPIC_MODEL,
+               'motto': str(d.get('motto') or '')[:90 if lang == 'en' else 48], 'topics': topics[:8]}
         os.makedirs(TOPICS_DIR, exist_ok=True)
-        tmp = _topics_path(layer) + '.tmp'
+        tmp = _topics_path(layer, lang) + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(out, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, _topics_path(layer))
+        os.replace(tmp, _topics_path(layer, lang))
         try:
-            os.remove(_topics_path(layer) + '.err')
+            os.remove(_topics_path(layer, lang) + '.err')
         except OSError:
             pass
     except Exception as e:
         os.makedirs(TOPICS_DIR, exist_ok=True)
-        with open(_topics_path(layer) + '.err', 'w', encoding='utf-8') as f:
+        with open(_topics_path(layer, lang) + '.err', 'w', encoding='utf-8') as f:
             f.write('%s: %s' % (e.__class__.__name__, e))
     finally:
         with _TOPIC_LOCK:
-            _TOPIC_JOBS.pop(layer, None)
+            _TOPIC_JOBS.pop((layer, lang), None)
 
 
-def _guess_topics(d):
+GUESS = {'ko': ('프로젝트 지도', '교훈'), 'en': ('project map', 'lessons'), 'ja': ('プロジェクトマップ', '教訓'), 'zh': ('项目地图', '经验')}
+
+
+def _guess_topics(d, lang='ko'):
     """[AI 결과가 없을 때] 색인 파일별로 묶은 추정 주제 - 색인 이름을 사람 말에 가깝게 다듬는다"""
     by = {}
     slug = d['layer'].split('/', 1)[1] if '/' in d['layer'] else ''
@@ -510,8 +525,8 @@ def _guess_topics(d):
     out = []
     for f, ms in sorted(by.items(), key=lambda kv: -len(kv[1])):
         n = re.sub(r'\.md$', '', f)
-        n = re.sub(r'^(lessons-)?index-?', '', n).replace(slug + '-', '') if n != 'INDEX' else '프로젝트 지도'
-        n = n.replace('lessons-index', '교훈').replace('-', ' ').strip() or '교훈'
+        n = re.sub(r'^(lessons-)?index-?', '', n).replace(slug + '-', '') if n != 'INDEX' else GUESS[lang][0]
+        n = n.replace('lessons-index', GUESS[lang][1]).replace('-', ' ').strip() or GUESS[lang][1]
         regs = {}
         for m in ms:
             regs[m['region']] = regs.get(m['region'], 0) + 1
@@ -521,29 +536,29 @@ def _guess_topics(d):
     return out[:8]
 
 
-def topics(layer, force=False):
+def topics(layer, force=False, lang='ko'):
     d = layer_data(layer)
     mems = d['memories']
-    cache = _json(_topics_path(layer))
+    cache = _json(_topics_path(layer, lang))
     h = _mem_hash(mems)
     with _TOPIC_LOCK:
-        running = layer in _TOPIC_JOBS
+        running = (layer, lang) in _TOPIC_JOBS
         need = bool(mems) and (force or not cache or (cache.get('hash') != h and time.time() - cache.get('generated', 0) > TOPIC_EVERY))
         if need and not running and not FAKEAI:
-            t = threading.Thread(target=_topic_job, args=(layer, mems, h), daemon=True)
-            _TOPIC_JOBS[layer] = t
+            t = threading.Thread(target=_topic_job, args=(layer, mems, h, lang), daemon=True)
+            _TOPIC_JOBS[(layer, lang)] = t
             t.start()
             running = True
     live = set(m['path'] for m in mems)
     st = dict((m['path'], m['used']) for m in mems)
     src = cache.get('topics') if cache else None
     items = []
-    for t in (src or _guess_topics(d)):
+    for t in (src or _guess_topics(d, lang)):
         ps = [p for p in t['paths'] if p in live]
         if ps:
             items.append({'label': t['label'], 'emoji': t['emoji'], 'paths': ps, 'count': len(ps), 'used': sum(st.get(p, 0) for p in ps)})
     items.sort(key=lambda x: -(x['count'] + x['used'] * 0.2))
-    err = _read(_topics_path(layer) + '.err').strip() if not cache else ''
+    err = _read(_topics_path(layer, lang) + '.err').strip() if not cache else ''
     return {'status': 'running' if running else ('ready' if cache else 'none'), 'source': 'ai' if src else 'guess',
             'motto': (cache or {}).get('motto') or '', 'generated': (cache or {}).get('generated') or 0, 'topics': items, 'error': err}
 
@@ -551,14 +566,14 @@ def topics(layer, force=False):
 # ---------------------------------------------------------------- 쉬운 말 풀이
 # AI 가 전보체로 남긴 기억을 한 줄 요약, 왜, 언제, 확인 질문으로 풀어 준다. 기억 경로와 수정 시각으로 캐시한다.
 EXPLAIN_DIR = os.path.join(ACTIVE, 'explain')
-EXPLAIN_SYS = ('너는 AI 가 개발 중에 남긴 기술 메모를, 그 프로젝트 주인인 개발자가 한눈에 이해하도록 쉬운 한국어로 풀어 주는 도우미다. '
-               '메모에 없는 사실은 지어내지 않는다. JSON 만 출력한다.')
+EXPLAIN_SYS = ('You turn terse technical notes that an AI coding agent saved during development into plain words the project owner '
+               'understands at a glance. Never invent facts that are not in the note. Output JSON only.')
 
 
-def explain(rel):
+def explain(rel, lang='ko'):
     import hashlib
     m = read_memory(rel)
-    key = hashlib.sha1(('%s|%d' % (m['path'], m['mtime'])).encode('utf-8')).hexdigest()[:20]
+    key = hashlib.sha1(('%s|%d|%s' % (m['path'], m['mtime'], lang)).encode('utf-8')).hexdigest()[:20]
     cp = os.path.join(EXPLAIN_DIR, key + '.json')
     c = _json(cp)
     if c:
@@ -566,18 +581,20 @@ def explain(rel):
     if FAKEAI:
         return {'summary': '(모의) %s' % m['path'].split('/')[-1], 'why': '모의 설명이에요.', 'when': '모의로 떠올려요.',
                 'check': '아직도 맞나요?', 'terms': []}
-    prompt = ('아래 메모를 풀어라. 출력 JSON:\n'
-              '{"summary":"무엇을 기억하는지 한 줄, 해요체, 45자 이내",'
-              '"why":"왜 기억해 두는지 - 모르면 무슨 일이 생기는지, 해요체 1~2문장",'
-              '"when":"Claude 가 언제 이 기억을 떠올리는지 - 어떤 파일, 작업, 에러에서. 해요체 1문장",'
-              '"check":"메모 내용이 지금도 맞는지 개발자가 예/아니요로 답할 수 있는 질문 하나, 해요체, 40자 이내",'
-              '"terms":[{"word":"메모에 나온 어려운 낱말","meaning":"쉬운 뜻 25자 이내"}]}\n'
-              'terms 는 최대 3개, 없으면 빈 배열. 파일 경로나 식별자는 필요할 때만 짧게 쓴다.\n\n--- 메모 (%s)\n%s') % (
-        m['path'], m['text'][:6000])
+    cjk = lang != 'en'
+    prompt = ('Explain the note below. Write every value in %s (%s).\n'
+              'Output JSON: {"summary":"what is remembered, one line, %s",'
+              '"why":"why it is worth remembering - what goes wrong without it, 1-2 sentences",'
+              '"when":"when Claude recalls it - which files, tasks or errors, 1 sentence",'
+              '"check":"one yes/no question the developer can answer to confirm the note is still true, %s",'
+              '"terms":[{"word":"a hard term from the note","meaning":"plain meaning, %s"}]}\n'
+              'At most 3 terms, empty array if none. Mention file paths or identifiers only when needed.\n\n--- note (%s)\n%s') % (
+        LANG.NAMES[lang], TONE[lang], 'max 45 characters' if cjk else 'max 90 characters', 'max 40 characters' if cjk else 'max 80 characters',
+        'max 25 characters' if cjk else 'max 50 characters', m['path'], m['text'][:6000])
     d = json_in(haiku(prompt, EXPLAIN_SYS, timeout=90))
-    out = {'summary': str(d.get('summary') or '')[:80], 'why': str(d.get('why') or '')[:300], 'when': str(d.get('when') or '')[:200],
-           'check': str(d.get('check') or '')[:80],
-           'terms': [{'word': str(t.get('word', ''))[:30], 'meaning': str(t.get('meaning', ''))[:60]} for t in (d.get('terms') or [])[:3] if isinstance(t, dict)]}
+    out = {'summary': str(d.get('summary') or '')[:160], 'why': str(d.get('why') or '')[:500], 'when': str(d.get('when') or '')[:300],
+           'check': str(d.get('check') or '')[:160],
+           'terms': [{'word': str(t.get('word', ''))[:40], 'meaning': str(t.get('meaning', ''))[:100]} for t in (d.get('terms') or [])[:3] if isinstance(t, dict)]}
     os.makedirs(EXPLAIN_DIR, exist_ok=True)
     with open(cp + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False)
@@ -658,9 +675,14 @@ def feedback_send(layer):
 # ---------------------------------------------------------------- 물어보기
 # 질문과 겹치는 기억을 파이썬이 고르고(한글 두 글자 조각 + 영문 낱말, 드문 조각일수록 무겁게), Haiku 가 그 기억만 보고 답한다.
 # recall.sh 를 쓰지 않는다 - 검색 기록이 기억 강도에 쌓여 망각 판정이 흐려진다.
-ASK_SYS = ('너는 "%s" 프로젝트의 뇌 캐릭터다. 귀엽고 다정한 해요체로 짧게(2~5문장) 답한다. '
-           '아래에 주어진 기억에 있는 내용만 근거로 답하고, 기억에 없으면 "그건 기억에 없어요"라고 솔직하게 말한다. 지어내지 않는다. '
-           '근거로 쓴 기억 번호를 refs 에 넣는다. JSON 만 출력한다: {"answer":"...","refs":[1,2]}')
+ASK_SYS = ('You are the brain character of the "%s" project. Answer in %s, cute and warm (%s), short (2-5 sentences). '
+           'Use only what is in the memories given below; if the answer is not in them, honestly say you don\'t remember that. Never make things up. '
+           'Put the numbers of the memories you used in refs. Output JSON only: {"answer":"...","refs":[1,2]}')
+ASK_EMPTY = {'ko': '아직 아무것도 기억하지 못해요. 이 프로젝트에서 같이 일하면 하나씩 배울게요!',
+             'en': "I don't remember anything yet. I'll learn bit by bit as we work on this project together!",
+             'ja': 'まだ何も覚えていません。このプロジェクトで一緒に働けば少しずつ覚えますね!',
+             'zh': '我还什么都不记得。在这个项目里一起工作的话,我会一点点学起来!'}
+ASK_UNSURE = {'ko': '음… 잘 모르겠어요', 'en': "Hmm... I'm not sure", 'ja': 'うーん…よくわかりません', 'zh': '嗯…我不太确定'}
 TOKEN_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_.]{2,}|[가-힣]+')
 
 
@@ -674,7 +696,7 @@ def _grams(text):
     return out
 
 
-def ask(layer, q, history):
+def ask(layer, q, history, lang='ko'):
     import math
     q = (q or '').strip()[:500]
     if not q:
@@ -682,7 +704,7 @@ def ask(layer, q, history):
     d = layer_data(layer)
     mems = d['memories']
     if not mems:
-        return {'answer': '아직 아무것도 기억하지 못해요. 이 프로젝트에서 같이 일하면 하나씩 배울게요!', 'refs': []}
+        return {'answer': ASK_EMPTY[lang], 'refs': []}
     docs = [_grams(' '.join((m['title'], m['line'], d['heads'].get(m['path'], '')))) for m in mems]
     qg = _grams(q + ' ' + ' '.join(h.get('q', '') for h in (history or [])[-2:]))
     df = {}
@@ -700,20 +722,21 @@ def ask(layer, q, history):
         m = mems[i]
         body = _read(os.path.join(CX, m['path']))[:1800]
         rows.append('[%d] %s\n%s' % (k, m['title'], body))
-    hist = '\n'.join('사용자: %s\n뇌: %s' % (h.get('q', '')[:200], h.get('a', '')[:300]) for h in (history or [])[-3:])
-    prompt = ('%s\n\n--- 기억\n%s\n\n--- 질문\n%s') % (('--- 앞선 대화\n' + hist) if hist else '', '\n\n'.join(rows) or '(관련 기억 없음)', q)
-    name = layer.split('/', 1)[1] if '/' in layer else '공용'
-    r = json_in(haiku(prompt, ASK_SYS % name, timeout=90))
+    hist = '\n'.join('User: %s\nBrain: %s' % (h.get('q', '')[:200], h.get('a', '')[:300]) for h in (history or [])[-3:])
+    prompt = ('%s\n\n--- memories\n%s\n\n--- question\n%s') % (('--- earlier conversation\n' + hist) if hist else '', '\n\n'.join(rows) or '(no related memories)', q)
+    name = layer.split('/', 1)[1] if '/' in layer else 'shared'
+    r = json_in(haiku(prompt, ASK_SYS % (name, LANG.NAMES[lang], TONE[lang]), timeout=90))
     refs = []
     for k in r.get('refs') or []:
         if isinstance(k, int) and 1 <= k <= len(top):
             m = mems[top[k - 1]]
             refs.append({'path': m['path'], 'title': m['title']})
-    return {'answer': str(r.get('answer') or '음… 잘 모르겠어요')[:800], 'refs': refs[:4]}
+    return {'answer': str(r.get('answer') or ASK_UNSURE[lang])[:1000], 'refs': refs[:4]}
 
 
 # ---------------------------------------------------------------- 동작 (기존 통로로만)
 def run(args, timeout=30, cwd=None):
+    args = plat.argv(args)   # Windows 는 Git Bash 를 고르고(WSL bash 가 아니라) 경로를 / 표기로
     p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd or BRAIN,
                        env=dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8'))
     return ((p.stdout or '') + (p.stderr or '')).strip(), p.returncode
@@ -794,16 +817,21 @@ def sleep_now():
     lg = os.path.join(HC, 'logs')
     os.makedirs(lg, exist_ok=True)
     with open(os.path.join(lg, 'sleep-manual.out'), 'a') as out:
-        subprocess.Popen(['bash', os.path.join(SCRIPTS, 'sleep.sh')], stdin=subprocess.DEVNULL, stdout=out,
-                         stderr=subprocess.STDOUT, cwd=BRAIN, start_new_session=True)
+        subprocess.Popen(plat.argv(['bash', os.path.join(SCRIPTS, 'sleep.sh')]), stdin=subprocess.DEVNULL, stdout=out,
+                         stderr=subprocess.STDOUT, cwd=BRAIN, **plat.detach_kw())
     return {'ok': True}
 
 
 def set_config(action, value):
-    allowed = {'on': [], 'off': [], 'preset': ['default', 'eco', 'quality']}
+    allowed = {'on': [], 'off': [], 'preset': ['default', 'eco', 'quality'], 'lang': list(LANG.LANGS)}
     if action not in allowed or (allowed[action] and value not in allowed[action]):
         raise ValueError('모르는 설정')
     if DRYRUN:
+        if action == 'lang':
+            p = os.path.join(ACTIVE, 'config')
+            lines = [x for x in _read(p).splitlines() if x and not x.startswith('lang=')] + ['lang=' + value]
+            with open(p, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines) + '\n')
         return {'ok': True, 'out': '(모의) %s %s' % (action, value or '')}
     out, rc = run(['bash', os.path.join(SCRIPTS, 'config.sh'), action] + ([value] if value else []))
     return {'ok': rc == 0, 'out': out}
@@ -869,23 +897,22 @@ class H(BaseHTTPRequestHandler):
                 lays = [x for x in q('l').split(',') if x]
                 return self._send(200, {'items': search(q('q'), lays)})
             if u.path == '/api/topics':
-                return self._send(200, topics(q('l'), q('force') == '1'))
+                return self._send(200, topics(q('l'), q('force') == '1', lang_of(q('lang'))))
             if u.path == '/api/explain':
-                return self._send(200, explain(q('p')))
+                return self._send(200, explain(q('p'), lang_of(q('lang'))))
             if u.path == '/api/feedback':
                 return self._send(200, {'items': feedback_list(q('l'))})
             if u.path == '/api/hippo':
                 return self._send(200, hippo())
             if u.path == '/api/persona':
-                slug = q('slug')
+                slug, L = q('slug'), lang_of(q('lang'))
                 g = persona.load(slug)
-                cat = persona.catalog()
-                for k in cat['breeds']:
-                    cat['breeds'][k]['effective'] = persona.compile_graph(persona.from_breed(k))['effective']
-                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g) if g else None, 'catalog': cat})
+                cat = persona.catalog(L)
+                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g, L) if g else None, 'catalog': cat})
             if u.path == '/api/breed':
-                g = persona.from_breed(q('b'))
-                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g)})
+                L = lang_of(q('lang'))
+                g = persona.from_breed(q('b'), L)
+                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g, L)})
             return self._send(404, {'error': 'no api'})
         except Exception as e:
             return self._send(400, {'error': '%s: %s' % (e.__class__.__name__, e)})
@@ -901,12 +928,12 @@ class H(BaseHTTPRequestHandler):
             n = int(self.headers.get('Content-Length') or 0)
             body = json.loads(self.rfile.read(min(n, 2 * 1024 * 1024)).decode('utf-8') or '{}')
             if u.path == '/api/persona/preview':
-                return self._send(200, {'compiled': persona.compile_graph(body.get('graph'))})
+                return self._send(200, {'compiled': persona.compile_graph(body.get('graph'), lang_of(body.get('lang')))})
             if u.path == '/api/persona/save':
                 slug = body.get('slug') or ''
                 root_of(slug)
                 g = persona.save(slug, body.get('graph'))
-                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g)})
+                return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g, lang_of(body.get('lang')))})
             if u.path == '/api/persona/delete':
                 slug = body.get('slug') or ''
                 root_of(slug)
@@ -930,7 +957,7 @@ class H(BaseHTTPRequestHandler):
             if u.path == '/api/feedback/send':
                 return self._send(200, feedback_send(body.get('layer') or ''))
             if u.path == '/api/ask':
-                return self._send(200, ask(body.get('layer') or '', body.get('q') or '', body.get('history') or []))
+                return self._send(200, ask(body.get('layer') or '', body.get('q') or '', body.get('history') or [], lang_of(body.get('lang'))))
             if u.path == '/api/config':
                 return self._send(200, set_config(body.get('action'), body.get('value')))
             if u.path == '/api/quit':
