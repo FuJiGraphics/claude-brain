@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>brain promo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root { --brain: #ffb3c8; --brain-d: #ff86a8; --ink: #2a1e2e; --ink2: #6e5f72; --pink: #ff6b9a; --lav: #9c7dff; --mint: #2fd18e; --lemon: #ffcf3f; --sky: #4fb1ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #fff4ee; font-family: "Pretendard Variable", Pretendard, sans-serif; color: var(--ink); }
+  .bg i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .7; }
+  .bg i:nth-child(1) { width: 520px; height: 520px; background: #ffd6e4; left: -120px; top: -140px; animation: drift 14s ease-in-out infinite; }
+  .bg i:nth-child(2) { width: 460px; height: 460px; background: #e6ddff; right: 120px; bottom: -180px; animation: drift 17s ease-in-out infinite reverse; }
+  .bg i:nth-child(3) { width: 380px; height: 380px; background: #d3f7e7; left: 380px; top: 360px; animation: drift 12s ease-in-out infinite; }
+  @keyframes drift { 50% { transform: translate(40px, -30px) scale(1.08); } }
+  .dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(42,30,46,.07) 1.5px, transparent 1.5px); background-size: 26px 26px; }
+  .device { position: absolute; left: 836px; top: 18px; width: 356px; height: 684px; border-radius: 46px; background: #2a1e2e; padding: 10px;
+    box-shadow: 0 0 0 2px #4a3a50, 0 30px 70px rgba(60, 20, 50, .35); transform: translateY(40px) scale(.94); opacity: 0; transition: transform 1s cubic-bezier(.34,1.56,.64,1), opacity .6s; }
+  .device.on { transform: none; opacity: 1; }
+  .device .clip { width: 336px; height: 664px; border-radius: 37px; overflow: hidden; background: #fff4ee; }
+  iframe { width: 400px; height: 790.5px; border: 0; transform: scale(.84); transform-origin: 0 0; display: block; }
+  .cap { position: absolute; left: 96px; top: 0; bottom: 0; width: 660px; display: flex; flex-direction: column; justify-content: center; }
+  .cap .k { display: inline-flex; align-self: flex-start; font-family: "Jua"; font-size: 20px; color: #fff; background: var(--pink); padding: 6px 16px; border-radius: 99px; box-shadow: 0 4px 0 #e04a7c; margin-bottom: 18px; }
+  .cap .t { font-family: "Jua"; font-size: 64px; line-height: 1.18; letter-spacing: -.01em; white-space: pre-line; }
+  .cap .s { font-size: 25px; color: var(--ink2); margin-top: 18px; font-weight: 600; line-height: 1.45; white-space: pre-line; }
+  .cap > * { transition: transform .55s cubic-bezier(.34,1.56,.64,1), opacity .35s; }
+  .cap.out > * { opacity: 0; transform: translateY(18px); }
+  .cap .t { transition-delay: .06s; } .cap .s { transition-delay: .12s; }
+  .hl { color: var(--pink); }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff4ee; z-index: 20; transition: opacity .8s, transform .8s; }
+  .overlay.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+  .overlay .pet { width: 230px; height: 230px; }
+  .overlay .logo { font-family: "Jua"; font-size: 110px; line-height: 1; margin-top: 6px; letter-spacing: -.02em; }
+  .overlay .tag { font-family: "Jua"; font-size: 34px; color: var(--ink2); margin-top: 14px; }
+  .overlay .cmd { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 30px; font-weight: 700; background: var(--ink); color: #fff; padding: 14px 28px; border-radius: 20px; margin-top: 30px; box-shadow: 0 6px 0 #000; }
+  .overlay .url { font-size: 22px; color: var(--ink2); margin-top: 22px; font-weight: 700; }
+  .overlay > * { animation: up .9s cubic-bezier(.34,1.56,.64,1) backwards; }
+  .overlay > *:nth-child(2) { animation-delay: .15s; } .overlay > *:nth-child(3) { animation-delay: .3s; } .overlay > *:nth-child(4) { animation-delay: .45s; } .overlay > *:nth-child(5) { animation-delay: .6s; }
+  @keyframes up { from { opacity: 0; transform: translateY(30px) scale(.9); } }
+  .cursor { position: absolute; left: 0; top: 0; width: 34px; height: 34px; z-index: 30; pointer-events: none; transform: translate(1100px, 760px); filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); }
+  .cursor svg { width: 100%; height: 100%; transition: transform .12s; }
+  .cursor.down svg { transform: scale(.82); }
+  .ripple { position: absolute; z-index: 29; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 3px solid var(--pink); pointer-events: none; animation: rip .6s ease-out forwards; }
+  @keyframes rip { to { transform: scale(3.2); opacity: 0; } }
+  .pet { overflow: visible; display: block; }
+  .pet .body { animation: hop 2.4s ease-in-out infinite; transform-origin: 50% 90%; transform-box: fill-box; }
+  .pet .eye { animation: blink 4.6s infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes hop { 0%, 60%, 100% { transform: translateY(0) scale(1, 1); } 70% { transform: translateY(0) scale(1.06, .92); } 82% { transform: translateY(-10px) scale(.96, 1.05); } }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+  .keycap { position: absolute; left: 96px; bottom: 54px; z-index: 25; font-family: "Jua"; font-size: 22px; background: #fff; border: 2px solid #e8dad3; border-bottom-width: 5px; border-radius: 12px; padding: 4px 14px; opacity: 0; transform: translateY(10px); transition: .3s; }
+  .keycap.on { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<div class="bg"><i></i><i></i><i></i></div>
+<div class="dots"></div>
+<div class="cap out" id="cap"><span class="k" id="ck"></span><div class="t" id="ct"></div><div class="s" id="cs"></div></div>
+<div class="device" id="device"><div class="clip"><iframe id="app" title="brain"></iframe></div></div>
+<div class="keycap" id="keycap"></div>
+<div class="overlay" id="intro"></div>
+<div class="overlay hide" id="outro"></div>
+<div class="cursor" id="cursor"><svg viewBox="0 0 24 24"><path d="M4 2.5 L4 19.5 L8.6 15.3 L11.6 21.8 L14.6 20.4 L11.7 14.1 L18 14.1 Z" fill="#fff" stroke="#2a1e2e" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+<script src="director.js"></script>
+</body>
+</html>
