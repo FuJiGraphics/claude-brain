@@ -42,3 +42,10 @@ def brief(text, mode):
 if __name__ == '__main__':
     src, mode = sys.argv[1], sys.argv[2]
     sys.stdout.write(brief(open(src, encoding='utf-8').read(), mode))
+    try:   # 기억 언어 절 - 대화 언어로 쓰고, 모를 때만 설정 언어(lang.py)
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import lang
+        sys.stdout.write(lang.BRIEF % lang.NAMES[lang.current()])
+    except Exception:
+        pass

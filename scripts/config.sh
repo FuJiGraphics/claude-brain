@@ -1,6 +1,6 @@
 #!/bin/bash
 # brain 설정 - 켜기,끄기와 해마(hippocampus) 모델,effort. 값은 <brain>/.active/config 에 한 줄씩 남는다(기기 로컬, 저장소에 안 올라간다).
-# 사용법: config.sh [show] | on | off | preset <default|eco|quality> | model <sonnet|opus|haiku> | effort <low|medium|high|xhigh|max|auto>
+# 사용법: config.sh [show] | on | off | preset <default|eco|quality> | model <sonnet|opus|haiku> | effort <low|medium|high|xhigh|max|auto> | lang <ko|en|ja|zh>
 #   default = Sonnet 5.5, effort medium (2026-09-30 실측: high 대비 턴 절반, 격리 시험 3건 품질 차이 없음)
 #   eco     = Sonnet 5.5, effort low    (사용량 최소 - 품질은 재지 않았다)
 #   quality = Opus 5.5, effort high
@@ -37,6 +37,7 @@ show() {
   on="$(get enabled)"; m="$(get hippocampus_model)"; e="$(get hippocampus_effort)"
   if [ "${on:-1}" = 0 ]; then echo "brain: 꺼짐"; else echo "brain: 켜짐"; fi
   echo "해마: $(name_of "${m:-claude-sonnet-5-5}"), effort ${e:-high}"
+  echo "언어: $(nw_py "$BRAIN/scripts/lang.py" get)"
 }
 stop_daemon() {
   local C="$BRAIN/cortex/.hippocampus"
@@ -64,5 +65,12 @@ case "${1:-show}" in
       *) echo "사용법: config.sh effort <low|medium|high|xhigh|max|auto>"; exit 2 ;;
     esac
     show ;;
-  *) echo "사용법: config.sh [show] | on | off | preset <default|eco|quality> | model <sonnet|opus|haiku> | effort <low|medium|high|xhigh|max|auto>"; exit 2 ;;
+  lang)
+    # 언어 - 앱 화면, 세션 문구, 성격 문장, 앱의 Haiku 답. 해마는 대화 언어로 기억을 쓰고 모를 때만 이 값을 쓴다
+    case "${2:-}" in
+      ko|en|ja|zh) put lang "$2" ;;
+      *) echo "사용법: config.sh lang <ko|en|ja|zh>"; exit 2 ;;
+    esac
+    show ;;
+  *) echo "사용법: config.sh [show] | on | off | preset <default|eco|quality> | model <sonnet|opus|haiku> | effort <low|medium|high|xhigh|max|auto> | lang <ko|en|ja|zh>"; exit 2 ;;
 esac

@@ -190,7 +190,7 @@ def save(slug, graph):
     return g
 
 
-def from_breed(key):
+def from_breed(key, lang=None):
     """[품종 → 그래프] 상황 노드는 쓰인 것만, 성향 노드는 왼쪽 열, 상황 노드는 오른쪽 열에 놓는다"""
     b = BREEDS[key]
     nodes, edges, sit_ids = [], [], {}
@@ -202,7 +202,7 @@ def from_breed(key):
         nid = 't%d' % (i + 1)
         nodes.append({'id': nid, 'kind': 'trait', 'trait': t, 'level': lv, 'x': 80, 'y': 40 + 100 * i})
         edges.append({'from': nid, 'to': sit_ids[s]})
-    return {'version': 1, 'breed': key, 'name': b['name'], 'enabled': True, 'nodes': nodes, 'edges': edges,
+    return {'version': 1, 'breed': key, 'name': breed_text(key, _lang(lang))[0], 'enabled': True, 'nodes': nodes, 'edges': edges,
             'verify_re': '', 'big_files': 5}
 
 
@@ -245,16 +245,98 @@ def normalize(graph):
             'big_files': bf if isinstance(bf, int) and 2 <= bf <= 50 else 5}
 
 
+# ---------------------------------------------------------------- 언어
+# 한국어는 위 표가 원본이고, 다른 언어는 persona_i18n.TEXT 가 같은 키로 덮는다(없는 항목은 한국어로 돌아간다)
+KO_UI = {
+    'head': '[기억] 사용자가 이 프로젝트에서 원하는 작업 방식(brain 성격 설정%s). 학습된 선호와 어긋나면 이 설정이 우선이다:',
+    'normal_line': '- 평소: %s.', 'sit_line': '- %s %s.', 'join': '. ', 'forced': '(설정으로 강제됨)',
+    'tail': '- 이번 요청에서 사용자가 다르게 말하면 그 말이 우선이다.',
+    'turn': '[기억] 이 프로젝트의 작업 방식: ', 'turn_sit': '%s엔 %s', 'list': ', ',
+    'w_loose': '연결 안 된 성향 %d개는 쓰이지 않아요: %s', 'w_many': '성향이 %d개라 문장이 묽어져요. %d개 이하가 효과적이에요',
+    'w_cancel': '%s: %s %d, %s %d이 같은 세기라 서로 상쇄돼요', 'w_mix': '%s: %s %d, %s %d이 섞여 %s %d만 남아요',
+    'w_down_nodetect': '감지할 수 없는 상황이라', 'w_down_nogate': '이 조합은 강제 수단이 없어',
+    'w_down': '%s의 %s 3은 %s 2로 내렸어요', 'w_budget': '세션 문장이 %d자로 예산(%d자)을 넘어요. 성향을 줄이면 각 문장이 더 잘 지켜져요',
+}
+
+
+def _lang(lang):
+    if lang in ('ko', 'en', 'ja', 'zh'):
+        return lang
+    try:
+        import lang as L
+        return L.current()
+    except Exception:
+        return 'ko'
+
+
+def _tx(lang):
+    if lang == 'ko':
+        return None
+    import persona_i18n
+    return persona_i18n.TEXT.get(lang)
+
+
+def ui(lang, key):
+    x = _tx(lang)
+    return (x and x['ui'].get(key)) or KO_UI[key]
+
+
+def trait(t, lang):
+    x = _tx(lang)
+    if x and t in x['traits']:
+        n, sh, so, fi = x['traits'][t]
+        return dict(TRAITS[t], name=n, short=sh, soft=so, firm=fi)
+    return TRAITS[t]
+
+
+def sit(s, lang):
+    """[상황] (이름, 문장 머리, 상기 줄 짧은 말)"""
+    x = _tx(lang)
+    if x and s in x['sits']:
+        v = x['sits'][s]
+        return v[0], (v[1] if s != 'normal' else ''), (v[2] if len(v) > 2 else v[1])
+    return SITUATIONS[s]['name'], SITUATIONS[s]['prefix'], SIT_SHORT.get(s, '평소')
+
+
+def special(t, s, lang):
+    x = _tx(lang)
+    return (x['special'].get((t, s)) if x else None) or (SPECIAL.get((t, s)) if not x else None)
+
+
+def special_short(t, s, lang):
+    x = _tx(lang)
+    return (x['special_short'].get((t, s)) if x else SPECIAL_SHORT.get((t, s)))
+
+
+def combo(pair, lang):
+    x = _tx(lang)
+    return (x and x['combos'].get(pair)) or dict(COMBOS)[pair]
+
+
+def gate_note(key, lang):
+    x = _tx(lang)
+    return (x and x['gates'].get(key)) or next(v[1] for v in GATES.values() if v[0] == key)
+
+
+def breed_text(k, lang):
+    x = _tx(lang)
+    if x and k in x['breeds']:
+        return x['breeds'][k]
+    b = BREEDS[k]
+    return b['name'], b['desc'], b['fit']
+
+
 # ---------------------------------------------------------------- 컴파일
-def compile_graph(graph):
+def compile_graph(graph, lang=None):
     """[그래프 → 주입물]
     - session: 세션 시작에 싣는 여러 줄(사실형), turn: 요청마다 한 줄, gates: 훅 관문 설정, warnings: 사용자에게 보일 경고
     - 같은 상황, 같은 축의 양 끝은 강도 차로 섞인다(0 이면 상쇄). 관문 없는 3 은 2 로 내린다
+    - lang: ko, en, ja, zh (없으면 brain 언어 설정)
     """
+    lang = _lang(lang)
     g = normalize(graph)
     nodes = {n['id']: n for n in g['nodes']}
     warnings = []
-    # 상황별 성향 강도 - 같은 성향이 같은 상황에 여러 번이면 센 쪽
     by_sit = {}
     linked = set()
     for e in g['edges']:
@@ -264,26 +346,25 @@ def compile_graph(graph):
         cur[t['trait']] = max(cur.get(t['trait'], 0), t['level'])
     loose = [n for n in g['nodes'] if n['kind'] == 'trait' and n['id'] not in linked]
     if loose:
-        warnings.append('연결 안 된 성향 %d개는 쓰이지 않아요: %s' % (
-            len(loose), ', '.join(TRAITS[n['trait']]['name'] for n in loose)))
+        warnings.append(ui(lang, 'w_loose') % (len(loose), ui(lang, 'list').join(trait(n['trait'], lang)['name'] for n in loose)))
     active = sum(len(v) for v in by_sit.values())
     if active > TRAIT_SOFT_MAX:
-        warnings.append('성향이 %d개라 문장이 묽어져요. %d개 이하가 효과적이에요' % (active, TRAIT_SOFT_MAX))
+        warnings.append(ui(lang, 'w_many') % (active, TRAIT_SOFT_MAX))
     # 축 섞기
     for s, tr in by_sit.items():
         for key, label, left, right in AXES:
             if left in tr and right in tr:
                 tr_l, tr_r = tr[left], tr[right]
                 d = tr_r - tr_l
-                ln, rn = TRAITS[left]['name'], TRAITS[right]['name']
-                sn = SITUATIONS[s]['name']
+                ln, rn = trait(left, lang)['name'], trait(right, lang)['name']
+                sn = sit(s, lang)[0]
                 del tr[left], tr[right]
                 if d == 0:
-                    warnings.append('%s: %s %d, %s %d이 같은 세기라 서로 상쇄돼요' % (sn, ln, tr_l, rn, tr_r))
+                    warnings.append(ui(lang, 'w_cancel') % (sn, ln, tr_l, rn, tr_r))
                 else:
                     win = right if d > 0 else left
                     tr[win] = abs(d)
-                    warnings.append('%s: %s %d, %s %d이 섞여 %s %d만 남아요' % (sn, ln, tr_l, rn, tr_r, TRAITS[win]['name'], abs(d)))
+                    warnings.append(ui(lang, 'w_mix') % (sn, ln, tr_l, rn, tr_r, trait(win, lang)['name'], abs(d)))
     # 관문과 강도 3 내리기
     gates = {}
     for s, tr in by_sit.items():
@@ -293,10 +374,10 @@ def compile_graph(graph):
             gk = GATES.get((t, s))
             if gk is None:
                 tr[t] = 2
-                why = '감지할 수 없는 상황이라' if SITUATIONS[s]['detect'] is None else '이 조합은 강제 수단이 없어'
-                warnings.append('%s의 %s 3은 %s 2로 내렸어요' % (SITUATIONS[s]['name'], TRAITS[t]['name'], why))
+                why = ui(lang, 'w_down_nodetect') if SITUATIONS[s]['detect'] is None else ui(lang, 'w_down_nogate')
+                warnings.append(ui(lang, 'w_down') % (sit(s, lang)[0], trait(t, lang)['name'], why))
             else:
-                gates[gk[0]] = gk[1]
+                gates[gk[0]] = gate_note(gk[0], lang)
     if 'first_edit_ask' in gates and 'big_change_ask' in gates:
         del gates['big_change_ask']   # 첫 수정마다 묻는다면 큰 변경 확인은 겹친다
     # 문장
@@ -309,45 +390,48 @@ def compile_graph(graph):
         ts = sorted(tr, key=lambda t: ([a[0] for a in AXES].index(TRAITS[t]['axis']), t))
         clauses = []
         used_combo = set()
-        for pair, text in COMBOS:
+        for pair, _ in COMBOS:
             if pair[0] in tr and pair[1] in tr:
-                clauses.append(text)
+                clauses.append(combo(pair, lang))
                 if pair == ('drive', 'curious'):
                     used_combo.add('curious')   # 조합 문장이 호기심의 행동을 대신한다
         base = []
         for t in ts:
             if t in used_combo:
                 continue
-            txt = SPECIAL.get((t, s)) or (TRAITS[t]['firm'] if tr[t] >= 2 else TRAITS[t]['soft'])
+            tt = trait(t, lang)
+            txt = special(t, s, lang) or (tt['firm'] if tr[t] >= 2 else tt['soft'])
             if tr[t] >= 3 and (t, s) in GATES:
-                txt += '(설정으로 강제됨)'
+                txt += ui(lang, 'forced')
             base.append(txt)
-        body = '. '.join(base + clauses)
-        prefix = SITUATIONS[s]['prefix'].format(n=g['big_files'])
+        parts = base + clauses
+        if lang == 'en':   # 영어는 문장마다 대문자로 시작한다
+            parts = [x[:1].upper() + x[1:] for x in parts]
+        body = ui(lang, 'join').join(parts)
         if s == 'normal':
-            lines.append('- 평소: %s.' % body)
+            lines.append(ui(lang, 'normal_line') % body)
         else:
-            lines.append('- %s %s.' % (prefix, body))
+            lines.append(ui(lang, 'sit_line') % (sit(s, lang)[1].format(n=g['big_files']), body))
     session = ''
     if lines:
-        head = '[기억] 사용자가 이 프로젝트에서 원하는 작업 방식(brain 성격 설정%s). 학습된 선호와 어긋나면 이 설정이 우선이다:' % (
-            ', ' + g['name'] if g['name'] else '')
-        session = '\n'.join([head] + lines + ['- 이번 요청에서 사용자가 다르게 말하면 그 말이 우선이다.'])
+        head = ui(lang, 'head') % ((ui(lang, 'list') + g['name']) if g['name'] else '')
+        session = '\n'.join([head] + lines + [ui(lang, 'tail')])
         if len(session) > SESSION_BUDGET:
-            warnings.append('세션 문장이 %d자로 예산(%d자)을 넘어요. 성향을 줄이면 각 문장이 더 잘 지켜져요' % (len(session), SESSION_BUDGET))
+            warnings.append(ui(lang, 'w_budget') % (len(session), SESSION_BUDGET))
     # 요청마다 한 줄 - 강도 2 이상 중 센 것부터 셋
     picks = []
     for s in order:
         for t, lv in (by_sit.get(s) or {}).items():
             if lv >= 2:
-                lab = TRAITS[t]['short'] if s == 'normal' else '%s엔 %s' % (SIT_SHORT[s], SPECIAL_SHORT.get((t, s)) or TRAITS[t]['short'])
+                short = special_short(t, s, lang) or trait(t, lang)['short']
+                lab = trait(t, lang)['short'] if s == 'normal' else ui(lang, 'turn_sit') % (sit(s, lang)[2], short)
                 picks.append((-lv, order.index(s), lab))
     picks.sort()
     turn = ''
     if picks:
-        turn = '[기억] 이 프로젝트의 작업 방식: ' + ', '.join(p[2] for p in picks[:3])
+        turn = ui(lang, 'turn') + ui(lang, 'list').join(p[2] for p in picks[:3])
         if len(turn) > TURN_BUDGET:
-            turn = '[기억] 이 프로젝트의 작업 방식: ' + ', '.join(p[2] for p in picks[:2])
+            turn = ui(lang, 'turn') + ui(lang, 'list').join(p[2] for p in picks[:2])
     gate_cfg = {k: True for k in gates}
     if 'big_change_ask' in gates:
         gate_cfg['big_change_ask'] = g['big_files']
@@ -355,29 +439,32 @@ def compile_graph(graph):
         gate_cfg['verify_re'] = g['verify_re'] or VERIFY_DEFAULT
     effective = {s: dict(tr) for s, tr in by_sit.items() if tr}
     return {'session': session, 'turn': turn, 'gates': gate_cfg, 'gate_notes': gates, 'warnings': warnings,
-            'effective': effective, 'enabled': g['enabled']}
+            'effective': effective, 'enabled': g['enabled'], 'lang': lang}
 
 
-def compiled(slug):
+def compiled(slug, lang=None):
     """[thalamus 용] 저장된 성격이 있고 켜져 있으면 컴파일 결과, 아니면 None"""
     g = load(slug)
     if not g or g.get('enabled') is False:
         return None
-    c = compile_graph(g)
+    c = compile_graph(g, lang)
     return c if (c['session'] or c['gates']) else None
 
 
-def catalog():
-    """[에디터 용] 성향, 상황, 축, 품종 목록"""
+def catalog(lang=None):
+    """[에디터 용] 성향, 상황, 축, 품종 목록 (그 언어로)"""
+    lang = _lang(lang)
+    tr = {k: trait(k, lang) for k in TRAITS}
     return {
-        'traits': {k: {x: v[x] for x in ('name', 'icon', 'axis', 'short', 'soft', 'firm')} for k, v in TRAITS.items()},
-        'situations': {k: {'name': v['name'], 'icon': v['icon'], 'detect': v['detect'], 'short': SIT_SHORT.get(k, '평소'),
+        'traits': {k: {x: v[x] for x in ('name', 'icon', 'axis', 'short', 'soft', 'firm')} for k, v in tr.items()},
+        'situations': {k: {'name': sit(k, lang)[0], 'icon': v['icon'], 'detect': v['detect'], 'short': sit(k, lang)[2],
                            'forceable': any(gk[1] == k for gk in GATES)} for k, v in SITUATIONS.items()},
         'axes': [{'key': a[0], 'name': a[1], 'left': a[2], 'right': a[3]} for a in AXES],
-        'breeds': {k: {x: v[x] for x in ('name', 'icon', 'desc', 'fit')} for k, v in BREEDS.items()},
+        'breeds': {k: dict(zip(('name', 'desc', 'fit'), breed_text(k, lang)), icon=v['icon']) for k, v in BREEDS.items()},
         'gates': ['%s+%s' % k for k in GATES],
-        'special_short': {'%s+%s' % k: v for k, v in SPECIAL_SHORT.items()},
+        'special_short': {'%s+%s' % k: special_short(k[0], k[1], lang) for k in SPECIAL_SHORT},
         'verify_default': VERIFY_DEFAULT,
+        'lang': lang,
     }
 
 
