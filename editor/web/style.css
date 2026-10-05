@@ -642,3 +642,4 @@ textarea:focus-visible, .input:focus-visible { outline: none; }
 .us-cost { font-size: 15px; white-space: nowrap; }
 .set > .btn { flex: none; white-space: nowrap; }
 .chat .bb code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 6px; word-break: break-all; }
+.j-ctl { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; }

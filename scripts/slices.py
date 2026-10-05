@@ -150,7 +150,7 @@ def make_requests(due_path, registry_path, out_dir, caller):
             stack = layer.split('/', 1)[1]
         req = {
             'mode': 'sweep', 'project_root': root, 'slug': slug, 'stack': stack, 'caller': caller,
-            'payload': {'slice': {'id': s['id'], 'files': s['files'], 'tok': s['tok']}},
+            'payload': dict({'slice': {'id': s['id'], 'files': s['files'], 'tok': s['tok']}}, **({'goal': s['goal']} if s.get('goal') else {})),
         }
         path = os.path.join(out_dir, 'req-%02d.json' % i)
         with open(path, 'w', encoding='utf-8') as f:

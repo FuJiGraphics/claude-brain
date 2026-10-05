@@ -800,7 +800,7 @@ function gaugeSvg(r) {
 function optimizeSheet() {
   const d = CUR;
   if (!d) return;
-  let mode = d.capacity > 1 ? 'over' : 'all';
+  let mode = d.capacity > 0.7 ? 'over' : 'all';   // 70% 를 넘은 색인이 있으면 그곳만 (서버 TIDY_TARGET)
   let plan = null;
   let seq = 0;
   const sh = openSheet({
@@ -838,6 +838,11 @@ function optimizeSheet() {
       const p = await api('/api/tidy', { layer: d.layer, mode, dry: true });
       if (my !== seq || !sh.el.isConnected) return;
       plan = p;
+      if (p.busy) {
+        box.innerHTML = `<div class="center" style="padding:6px 0"><span style="font-size:30px">🧹</span><br><b>${t('opt.busy', { n: p.busy })}</b><p class="hint" style="margin:4px 0 0">${t('opt.busy.hint')}</p></div>`;
+        plan = null;
+        return;
+      }
       if (!p.count) {
         box.innerHTML = `<div class="center" style="padding:6px 0"><span style="font-size:30px">🫧</span><br><b>${t(mode === 'over' ? 'opt.none.over' : 'opt.none.all')}</b>${mode === 'over' ? `<p class="hint" style="margin:4px 0 0">${t('opt.none.over.hint')}</p>` : ''}</div>`;
         return;
@@ -1548,12 +1553,26 @@ async function pageJournal(alive) {
     <div class="card hippo${h.alive ? ' busy' : ''}"><div class="av">${h.alive ? '✍️' : '😴'}</div>
       <div><div class="jua" style="font-size:20px">${t(h.alive ? 'j.busy' : 'j.idle')}</div>
       <div class="hint">${h.alive && h.current ? esc(h.current.slice(0, 60)) + '<br>' : ''}${t('j.stats', { q: h.queue.length, n: h.results.length, ok: counts.done || 0, bad: (counts.failed || 0) + (counts.timeout || 0) + (counts.denied || 0) })}</div></div></div>
+    ${h.alive || h.queue.length ? `<div class="j-ctl">
+      ${h.alive ? (h.stopping ? `<span class="pill">${t('j.stopping')}</span>` : `<button class="btn soft small" id="jStop" data-tip="${esc(t('j.stop.tip'))}">${t('j.stop')}</button>`) : ''}
+      ${h.queue.length ? `<button class="btn soft small" id="jClear" data-tip="${esc(t('j.clear.tip'))}">${t('j.clear', { n: h.queue.length })}</button>` : ''}</div>` : ''}
     ${h.queue.length ? `<div class="h2">${t('j.wait')} <small>${t('j.wait.n', { n: h.queue.length })}</small></div><div class="chips">${h.queue.map((x) => `<span class="chip">${esc(who(x) + ' ' + modeName(x.mode))}</span>`).join('')}</div>` : ''}
     <p class="sub" style="margin-top:12px">${t('j.sub')}</p>
     <div class="list" id="entries">${rs.map((r, i) => `<button class="entry" data-i="${i}"><span class="st ${esc(r.status)}">${ST_ICON[r.status] || '📝'}</span>
       <span style="min-width:0"><span class="et">${esc(who(r))} ${esc(modeName(r.mode))}</span>
       <span class="ed">${esc(r.first)}</span><span class="hint">${esc((r.finished || '').replace('T', ' ').slice(5, 16))}</span></span></button>`).join('') ||
       `<div class="empty"><span class="big">📓</span>${t('j.empty')}<br><span class="hint">${t('j.empty.hint')}</span></div>`}</div>`;
+  const jStop = $('#jStop');
+  if (jStop) jStop.addEventListener('click', async () => {
+    jStop.disabled = true;
+    try { await api('/api/hippo/stop', {}); toast(tp('j.stop.done')); setTimeout(route, 600); } catch (e) { toast(e.message); jStop.disabled = false; }
+  });
+  const jClear = $('#jClear');
+  if (jClear) jClear.addEventListener('click', async () => {
+    if (jClear.dataset.sure !== '1') { jClear.dataset.sure = '1'; jClear.textContent = tp('j.clear.sure'); setTimeout(() => { if (jClear.isConnected) { jClear.dataset.sure = ''; jClear.textContent = tp('j.clear', { n: h.queue.length }); } }, 3000); return; }
+    jClear.disabled = true;
+    try { const r = await api('/api/hippo/clear', {}); toast(tp('j.clear.done', { n: r.moved })); setTimeout(route, 600); } catch (e) { toast(e.message); jClear.disabled = false; }
+  });
   $$('#entries .entry').forEach((b) => b.addEventListener('click', () => {
     const r = rs[+b.dataset.i];
     openSheet({ title: `<span>${ST_ICON[r.status] || '📝'}</span><span>${esc(modeName(r.mode))}</span>`, full: true,
@@ -1777,7 +1796,8 @@ async function checkApplied() {
   const done = (r.done || []).slice(0, 3);
   if (!done.length) return;
   done.forEach((x, i) => setTimeout(() => {
-    const head = x.status !== 'done' ? tp('ap.fail') : tp('ap.' + (I18N.ko['ap.' + x.kind] ? x.kind : 'tidy'), { n: x.n, slug: x.slug });
+    const head = x.status !== 'done' ? tp('ap.fail') : x.kind === 'tidy' && x.before != null && x.after != null ? tp('ap.tidy.w', { b: pct(x.before), a: pct(x.after) })
+      : tp('ap.' + (I18N.ko['ap.' + x.kind] ? x.kind : 'tidy'), { n: x.n, slug: x.slug });
     toast(x.first && x.status === 'done' && x.first !== '(dry-run)' ? head + '\n' + x.first : head, 5200);
     if (x.status === 'done' && i === 0 && $('#stage')) { jump(); burst(['✨', '💡']); }
   }, i * 5600));

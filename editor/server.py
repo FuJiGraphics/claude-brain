@@ -77,8 +77,6 @@ REGIONS = [
     ('fact', '구조와 사실', re.compile(r'facts?\b|facts-|api-facts|구조|structure|router|경로|위치|아키텍처|스키마|포맷|형식|매핑', re.I)),
     ('decision', '결정과 선호', re.compile(r'선호|결정|컨벤션|convention|원칙|정책', re.I)),
 ]
-REGION_NAMES = dict((k, n) for k, n, _ in REGIONS)
-REGION_NAMES['other'] = '그 밖의 교훈'
 
 
 # ---------------------------------------------------------------- 읽기 도우미
@@ -237,9 +235,10 @@ def hippo():
     queued = []
     for p in q:
         r = _json(p, {}) or {}
-        queued.append({'id': os.path.basename(p)[:-5], 'mode': r.get('mode'), 'slug': r.get('slug')})
+        queued.append({'id': os.path.basename(p)[:-5], 'mode': r.get('mode'), 'slug': r.get('slug'), 'caller': r.get('caller'),
+                       'slice': ((r.get('payload') or {}).get('slice') or {}).get('id', '')})
     return {'alive': alive, 'pid': pid if alive else '', 'current': _read(os.path.join(lock, 'current')).strip() if alive else '',
-            'queue': queued, 'processing': len(pr), 'results': results}
+            'queue': queued, 'processing': len(pr), 'results': results, 'stopping': alive and os.path.exists(os.path.join(HC, 'stop'))}
 
 
 def config():
@@ -282,7 +281,8 @@ def code_version_label():
 
 
 # ---------------------------------------------------------------- 상태 계산 (캐릭터)
-STAGES = [(0, 'egg', '알'), (1, 'baby', '아기'), (10, 'kid', '어린이'), (50, 'adult', '어른'), (200, 'sage', '현자')]
+# 이름은 앱이 키로 언어마다 붙인다(i18n.js stage.*) - 서버는 키만 보낸다
+STAGES = [(0, 'egg'), (1, 'baby'), (10, 'kid'), (50, 'adult'), (200, 'sage')]
 
 
 def stage_of(n):
@@ -291,8 +291,7 @@ def stage_of(n):
         if n >= s[0]:
             cur = s
     nxt = next((s for s in STAGES if s[0] > n), None)
-    return {'key': cur[1], 'name': cur[2], 'next': nxt[0] if nxt else None, 'next_name': nxt[2] if nxt else None,
-            'next_key': nxt[1] if nxt else None}
+    return {'key': cur[1], 'next': nxt[0] if nxt else None, 'next_key': nxt[1] if nxt else None}
 
 
 def summarize(layer, slug=None, hp=None, cfg=None):
@@ -390,7 +389,6 @@ def layer_detail(layer):
     s['migrated'] = sum(1 for m in d['memories'] if m['migrated'])
     s['memories'] = d['memories']   # heads 는 data 쪽에만 있다
     s['dormant_list'] = d['dormant'][:200]
-    s['region_names'] = REGION_NAMES
     s['results'] = [r for r in hp['results'] if (slug and r['slug'] == slug)][-10:][::-1]
     s['queue'] = [q for q in hp['queue'] if slug and q.get('slug') == slug]
     s['muted'] = bool(slug) and slug in config()['mute']
@@ -661,13 +659,37 @@ def explain(rel, lang='ko'):
 # ---------------------------------------------------------------- 피드백 우체통
 # 기억 하나하나에 대한 피드백(맞아요, 달라졌어요, 중요해요, 필요 없어요)을 모았다가 한 번에 remember.sh 로 넘긴다 - 해마가 한 번만 일한다.
 FEEDBACK_DIR = os.path.join(ACTIVE, 'feedback')
-FB_KINDS = {
-    'confirm': '확인: 기억 `%s` 는 지금도 맞다(사용자가 직접 확인) - verified 를 오늘로 갱신한다',
-    'important': '중요: 기억 `%s` 는 사용자에게 중요하다 - 사용자 결정으로 표시해 쉽게 잊히지 않게 한다',
-    'outdated': '정정: 기억 `%s` 의 내용이 틀렸거나 낡았다 - %s',
-    'forget': '필요 없음: 사용자가 기억 `%s` 를 더는 필요 없다고 했다 - 아카이브한다(하드 삭제 아님)',
-    'restore': '되살리기: 보관함(_archive)의 기억 `%s` 를 사용자가 다시 쓰겠다고 했다 - 원래 자리로 옮기고 ARCHIVED 머리줄을 지운 뒤 인덱스 줄을 다시 단다',
+FB_TEXTS = {   # 해마에게 넘기는 피드백 문장 - 설정 언어로 쓴다(해마가 근거로 인용해 기억 본문에 남을 수 있다)
+    'ko': {'confirm': '확인: 기억 `%s` 는 지금도 맞다(사용자가 직접 확인) - verified 를 오늘로 갱신한다',
+           'important': '중요: 기억 `%s` 는 사용자에게 중요하다 - 사용자 결정으로 표시해 쉽게 잊히지 않게 한다',
+           'outdated': '정정: 기억 `%s` 의 내용이 틀렸거나 낡았다 - %s',
+           'forget': '필요 없음: 사용자가 기억 `%s` 를 더는 필요 없다고 했다 - 아카이브한다(하드 삭제 아님)',
+           'restore': '되살리기: 보관함(_archive)의 기억 `%s` 를 사용자가 다시 쓰겠다고 했다 - 원래 자리로 옮기고 ARCHIVED 머리줄을 지운 뒤 인덱스 줄을 다시 단다',
+           'evidence': '근거: 사용자가 brain 앱에서 직접 남김 %s', 'tidy': '사용자가 brain 앱에서 머리 정리를 요청했다'},
+    'en': {'confirm': 'Confirm: memory `%s` is still correct (confirmed by the user) - update its verified date to today',
+           'important': 'Important: memory `%s` matters to the user - mark it as a user decision so it is not forgotten easily',
+           'outdated': 'Correction: memory `%s` is wrong or out of date - %s',
+           'forget': 'Not needed: the user said memory `%s` is no longer needed - archive it (no hard delete)',
+           'restore': 'Restore: the user wants archived memory `%s` (in _archive) back - move it to its original place, remove the ARCHIVED header and add its index line again',
+           'evidence': 'evidence: left by the user in the brain app on %s', 'tidy': 'the user asked for a tidy-up in the brain app'},
+    'ja': {'confirm': '確認: 記憶 `%s` は今も正しい(ユーザーが直接確認) - verified を今日に更新する',
+           'important': '重要: 記憶 `%s` はユーザーにとって大事 - ユーザーの決定として印を付け、忘れにくくする',
+           'outdated': '訂正: 記憶 `%s` の内容が間違っているか古い - %s',
+           'forget': '不要: ユーザーが記憶 `%s` はもういらないと言った - アーカイブする(完全には削除しない)',
+           'restore': '復元: 保管庫(_archive)の記憶 `%s` をユーザーがまた使いたいと言った - 元の場所に戻し、ARCHIVED の見出し行を消して索引の行を付け直す',
+           'evidence': '根拠: ユーザーが brain アプリで直接残した %s', 'tidy': 'ユーザーが brain アプリで頭の整理を頼んだ'},
+    'zh': {'confirm': '确认: 记忆 `%s` 现在仍然正确(用户直接确认) - 把 verified 更新为今天',
+           'important': '重要: 记忆 `%s` 对用户很重要 - 标记为用户决定,不要轻易遗忘',
+           'outdated': '纠正: 记忆 `%s` 的内容错误或过时 - %s',
+           'forget': '不再需要: 用户说记忆 `%s` 不再需要 - 归档(不彻底删除)',
+           'restore': '找回: 用户想重新使用归档(_archive)中的记忆 `%s` - 移回原处,删除 ARCHIVED 标题行,重新加上索引行',
+           'evidence': '依据: 用户在 brain 应用中直接留下 %s', 'tidy': '用户在 brain 应用中要求整理大脑'},
 }
+FB_KINDS = ('confirm', 'important', 'outdated', 'forget', 'restore')
+
+
+def fb_text(key):
+    return FB_TEXTS.get(config()['lang'], FB_TEXTS['ko'])[key]
 _FB_LOCK = threading.Lock()
 
 
@@ -716,9 +738,9 @@ def feedback_send(layer):
         today = datetime.date.today().isoformat()
         args = []
         for x in items:
-            t = FB_KINDS[x['kind']]
+            t = fb_text(x['kind'])
             body = t % ((x['path'], x['text']) if x['kind'] == 'outdated' else (x['path'],))
-            args.append('%s - 근거: 사용자가 brain 앱에서 직접 남김 %s' % (body, today))
+            args.append('%s - %s' % (body, fb_text('evidence') % today))
         root = root_of(layer[9:]) if layer.startswith('projects/') else '/'
         if DRYRUN:
             out, rc = '(모의) 큐 투입: %d건' % len(args), 0
@@ -828,7 +850,7 @@ def feed(slug, text):
         track('feed', '', slug)
         return {'ok': True, 'out': '(모의) 큐 투입: %s' % text[:40]}
     out, rc = run(['bash', os.path.join(SCRIPTS, 'remember.sh'), '--root', root_of(slug),
-                   '%s - 근거: 사용자가 brain 에디터에서 직접 남김 %s' % (text[:2000], datetime.date.today().isoformat())])
+                   '%s - %s' % (text[:2000], fb_text('evidence') % datetime.date.today().isoformat())])
     if rc == 0:
         track('feed', out, slug)
     return {'ok': rc == 0, 'out': out}
@@ -843,28 +865,41 @@ def correct(slug, rel, text):
     if DRYRUN:
         return {'ok': True, 'out': '(모의) 정정 투입: %s' % rel}
     out, rc = run(['bash', os.path.join(SCRIPTS, 'remember.sh'), '--root', root,
-                   '정정: 기억 `%s` 의 내용이 틀렸거나 낡았다 - %s - 근거: 사용자가 brain 에디터에서 직접 정정 %s' % (
-                       rel, text[:2000], datetime.date.today().isoformat())])
+                   '%s - %s' % (fb_text('outdated') % (rel, text[:2000]), fb_text('evidence') % datetime.date.today().isoformat())])
     return {'ok': rc == 0, 'out': out}
 
 
+TIDY_TARGET = 0.7   # 앱 최적화의 목표: 색인 파일마다 글자 수와 항목 수가 상한의 70% 이하 (기억 본문은 줄이지 않는다)
+
+
 def tidy(layer, mode, dry):
-    """[정리] 그 레이어의 조각을 해마 sweep 큐로 넣는다. mode=over 면 기준을 넘은 인덱스와 미등록 조각만, all 이면 전부"""
+    """[정리] 그 레이어의 조각을 해마 sweep 큐로 넣는다
+    - mode=over 면 목표(70%)를 넘은 색인과 색인 없는 기억 조각만, all 이면 전부
+    - 목표를 넘은 색인은 payload.goal 로 넘긴다 - 해마가 압축하고 주제별로 나눠 그 파일을 목표 아래로 만든다(§5)
+    """
     check_layer(layer)
     sl = [s for s in slices.compute(CX, 40000) if s['layer'] == layer and not s['id'].endswith(':dormant.md')]
+    heavy = {}
+    for ix in layer_data(layer)['indexes']:
+        r = max(ix['chars'] / float(ix['cap']), ix['items'] / float(ITEM_CAP))
+        if r > TIDY_TARGET:
+            heavy[ix['file']] = {'file': ix['file'], 'chars': ix['chars'], 'cap': ix['cap'], 'items': ix['items'],
+                                 'item_cap': ITEM_CAP, 'ratio': round(r, 3)}
     if mode == 'over':
-        over = set()
-        for ix in layer_data(layer)['indexes']:
-            if ix['chars'] > ix['cap'] or ix['items'] > ITEM_CAP:
-                over.add(ix['file'])
-        sl = [s for s in sl if s['id'].split(':', 1)[1].split('#')[0] in over or '(미등록)' in s['id']]
-    plan = [{'id': s['id'], 'tok': s['tok'], 'files': len(s['files'])} for s in sl]
-    res = {'slices': plan, 'tok': sum(s['tok'] for s in sl), 'count': len(sl)}
-    if dry or not sl:
+        sl = [s for s in sl if s['id'].split(':', 1)[1].split('#')[0] in heavy or '(미등록)' in s['id']]
+    for s in sl:
+        f = s['id'].split(':', 1)[1].split('#')[0]
+        if f in heavy:
+            s['goal'] = {'kind': 'lighten', 'target_ratio': TIDY_TARGET, 'file': heavy[f],
+                         'why': fb_text('tidy')}
+    plan = [{'id': s['id'], 'tok': s['tok'], 'files': len(s['files']), 'goal': bool(s.get('goal'))} for s in sl]
+    busy = sum(1 for q in hippo()['queue'] if q.get('mode') == 'sweep' and str(q.get('slice') or '').startswith(layer + ':'))
+    res = {'slices': plan, 'tok': sum(s['tok'] for s in sl), 'count': len(sl), 'target': TIDY_TARGET, 'heavy': len(heavy), 'busy': busy}
+    if dry or not sl or busy:   # 이미 이 뇌의 정리가 대기 중이면 다시 쌓지 않는다(여러 번 눌러 같은 일이 겹겹이 쌓이지 않게)
         return res
     if DRYRUN:
         res['enqueued'] = ['(모의) 큐 투입: %s' % s['id'] for s in sl]
-        track('tidy', '', layer[9:] if layer.startswith('projects/') else '', len(sl))
+        track('tidy', '', layer[9:] if layer.startswith('projects/') else '', len(sl), layer=layer, before=_weight(layer))
         return res
     tmp = os.path.join(HC, 'editor-req')
     os.makedirs(tmp, exist_ok=True)
@@ -882,8 +917,43 @@ def tidy(layer, mode, dry):
         o, _ = run(['bash', os.path.join(SCRIPTS, 'hippocampus-enqueue.sh'), r])
         logs.append(o.splitlines()[0] if o else '')
     res['enqueued'] = logs
-    track('tidy', '\n'.join(logs), layer[9:] if layer.startswith('projects/') else '', len(sl))
+    track('tidy', '\n'.join(logs), layer[9:] if layer.startswith('projects/') else '', len(sl), layer=layer, before=_weight(layer))
     return res
+
+
+def hippo_stop():
+    """[해마 멈추기] 지금 하던 일만 끝내고 멈춘다 - 대기 중인 일은 그대로 남는다"""
+    if DRYRUN:
+        return {'ok': True}
+    os.makedirs(HC, exist_ok=True)
+    if hippo()['alive']:
+        open(os.path.join(HC, 'stop'), 'w').close()
+    return {'ok': True}
+
+
+def hippo_clear():
+    """[대기 비우기] 기다리는 일을 .hippocampus/held-<시각>/ 으로 옮긴다(지우지 않는다). 처리 중인 일은 건드리지 않는다"""
+    qs = sorted(glob.glob(os.path.join(HC, 'queue', '*.json')))
+    if DRYRUN or not qs:
+        return {'ok': True, 'moved': 0 if not DRYRUN else len(qs)}
+    held = os.path.join(HC, 'held-%s' % time.strftime('%Y%m%d-%H%M%S'))
+    os.makedirs(held, exist_ok=True)
+    moved = []
+    for p in qs:
+        try:
+            os.replace(p, os.path.join(held, os.path.basename(p)))
+            moved.append(os.path.basename(p)[:-5])
+        except OSError:
+            pass
+    # 옮긴 일만 기다리던 알림은 지운다 - 끝나지 않을 일을 기다리지 않게
+    with _PEND_LOCK:
+        gone = set(moved)
+        items = [x for x in (_json(PENDING, []) or []) if isinstance(x, dict) and not (set(x.get('ids') or []) & gone)]
+        if os.path.exists(PENDING):
+            with open(PENDING + '.tmp', 'w', encoding='utf-8') as f:
+                json.dump(items, f, ensure_ascii=False)
+            os.replace(PENDING + '.tmp', PENDING)
+    return {'ok': True, 'moved': len(moved), 'held': plat.norm(held)}
 
 
 def sleep_now():
@@ -904,7 +974,15 @@ QID_RE = re.compile(r'\d{8}T\d{6}Z-[A-Za-z0-9_-]+')
 _PEND_LOCK = threading.Lock()
 
 
-def track(kind, out, slug='', n=1):
+def _weight(layer):
+    """[머리 무게] 그 레이어 색인들의 가장 큰 상한 비율 (summarize 의 capacity 와 같은 계산)"""
+    try:
+        return round(max([max(ix['chars'] / float(ix['cap']), ix['items'] / float(ITEM_CAP)) for ix in layer_data(layer)['indexes']] or [0]), 3)
+    except Exception:
+        return None
+
+
+def track(kind, out, slug='', n=1, **extra):
     """[맡긴 일 남기기] out(큐 투입 출력)에서 큐 id 를 찾아 남긴다. 모의 실행은 가짜 id 로 3초 뒤 끝난 것으로 친다"""
     ids = QID_RE.findall(out or '')
     if DRYRUN:
@@ -913,7 +991,7 @@ def track(kind, out, slug='', n=1):
         return
     with _PEND_LOCK:
         items = [x for x in (_json(PENDING, []) or []) if isinstance(x, dict) and time.time() - x.get('t', 0) < 3 * 86400]
-        items.append({'ids': ids, 'kind': kind, 'slug': slug or '', 'n': n, 't': int(time.time())})
+        items.append(dict({'ids': ids, 'kind': kind, 'slug': slug or '', 'n': n, 't': int(time.time())}, **extra))
         os.makedirs(ACTIVE, exist_ok=True)
         with open(PENDING + '.tmp', 'w', encoding='utf-8') as f:
             json.dump(items[-50:], f, ensure_ascii=False)
@@ -942,8 +1020,15 @@ def applied():
             waiting += 1
             continue
         bad = [st for st in sts if st not in ('done', 'partial')]
-        out.append({'key': '%s:%d' % (x['ids'][0], x.get('t', 0)), 'kind': x.get('kind'), 'slug': x.get('slug') or '',
-                    'n': x.get('n') or 1, 'status': bad[0] if bad else 'done', 'first': first})
+        row = {'key': '%s:%d' % (x['ids'][0], x.get('t', 0)), 'kind': x.get('kind'), 'slug': x.get('slug') or '',
+               'n': x.get('n') or 1, 'status': bad[0] if bad else 'done', 'first': first}
+        if x.get('kind') == 'tidy' and isinstance(x.get('layer'), str) and isinstance(x.get('before'), (int, float)):
+            try:
+                check_layer(x['layer'])
+                row.update(before=x['before'], after=_weight(x['layer']))
+            except ValueError:
+                pass
+        out.append(row)
     return {'done': out, 'waiting': waiting}
 
 
@@ -1178,6 +1263,10 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, ask(body.get('layer') or '', body.get('q') or '', body.get('history') or [], lang_of(body.get('lang'))))
             if u.path == '/api/config':
                 return self._send(200, set_config(body.get('action'), body.get('value')))
+            if u.path == '/api/hippo/stop':
+                return self._send(200, hippo_stop())
+            if u.path == '/api/hippo/clear':
+                return self._send(200, hippo_clear())
             if u.path == '/api/applied/ack':
                 return self._send(200, applied_ack(body.get('keys')))
             if u.path == '/api/register':
