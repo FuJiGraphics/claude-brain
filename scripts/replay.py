@@ -40,10 +40,23 @@ AWAKE_GAP = 20 * 60      # 같은 대화록의 깨어 있는 중 재생 사이 �
 AWAKE_PER_HOUR = 4       # 모든 세션을 합친 깨어 있는 중 재생 상한(한 시간) - 사용량 보호
 MAX_CHARS = 36000
 A_CHARS = 1500           # 어시스턴트 답 하나를 담는 글자 상한 - 세션은 알아낸 수치, 메커니즘, 파일 위치를 답에 쓴다(판정: 앞 500자만 담으면 사실의 절반을 놓쳤다)
-EVIDENCE_RE = re.compile(r'(\.cs:\d|\.py:\d|:\d{2,}|\d+(?:\.\d+)?\s*(?:ms|초|%|Hz|px|배)|원인|결론|실측|측정|확인했|때문|함정|재현|수치|근거)')
-CORRECT_RE = re.compile(r'(아니[야요,. ]|아닌데|아니라|틀렸|틀린|잘못|다시 해|그게 아니|하지 ?마|말했잖|이미 말|원래는|그렇게 하면 안|왜 .{0,20}(했|안 ?했|없))')
-DECIDE_RE = re.compile(r'(앞으로|항상|절대|반드시|무조건|기본으로|규칙|정책|결정|하자$|로 하자|쓰지 ?마|쓰자|금지)')
-REMEMBER_RE = re.compile(r'(기억해|기억하|잊지 ?마|잊어먹|메모해|노트북에|기억에)')
+# 아래 넷은 사람 요청(U)과 어시스턴트 답(A)을 읽는 규칙 기반 신호다. 한국어, 영어, 일본어, 중국어를 함께 본다(대화 언어가 무엇이든 같은 점수)
+EVIDENCE_RE = re.compile(r'(\.cs:\d|\.py:\d|:\d{2,}|\d+(?:\.\d+)?\s*(?:ms|초|%|Hz|px|배)|원인|결론|실측|측정|확인했|때문|함정|재현|수치|근거'
+                         r'|(?i:\broot cause\b|\bcaused by\b|\bturns out\b|\breproduc|\bmeasured\b|\bbenchmark|\bverified\b|\bpitfall|\bgotcha)'
+                         r'|原因|結論|再現|計測|測定|確認した|落とし穴|结论|复现|测量|确认了|踩坑)')
+CORRECT_RE = re.compile(r'(아니[야요,. ]|아닌데|아니라|틀렸|틀린|잘못|다시 해|그게 아니|하지 ?마|말했잖|이미 말|원래는|그렇게 하면 안|왜 .{0,20}(했|안 ?했|없)'
+                        r"|(?i:^no[,. !]|\bthat'?s (?:not|wrong)\b|\bthat is (?:not|wrong)\b|\bnot what i\b|\bi (?:already )?(?:said|told you)\b"
+                        r"|\bdon'?t do that\b|\bdo not do that\b|\bstop doing\b|\bwhy did you\b|\bwhy didn'?t you\b|\bundo (?:that|this)\b|\byou broke\b)"
+                        r'|違う|ちがう|間違|そうじゃな|やめて|言ったでしょ|言ったよね|なんで.{0,20}(?:した|しなかった)|元に戻して'
+                        r'|不对|不是这样|错了|搞错|别这样|不要这样|我说过|我已经说|为什么.{0,20}(?:要|没)|改回去)')
+DECIDE_RE = re.compile(r'(앞으로|항상|절대|반드시|무조건|기본으로|규칙|정책|결정|하자$|로 하자|쓰지 ?마|쓰자|금지'
+                       r"|(?i:\bfrom now on\b|\bgoing forward\b|\balways\b|\bnever\b|\bby default\b|\bwe decided\b|\blet'?s (?:use|go with|keep)\b"
+                       r"|\bdon'?t use\b|\bdo not use\b|\bforbidden\b|\bthe rule is\b|\bour policy\b)"
+                       r'|今後|これから|常に|必ず|絶対|デフォルトで|ルール|方針|決定|にしよう|を使おう|使わないで|禁止'
+                       r'|以后|今后|始终|总是|一定要|绝对|默认|规则|政策|决定|就用|不要用|禁止)')
+REMEMBER_RE = re.compile(r'(기억해|기억하|잊지 ?마|잊어먹|메모해|노트북에|기억에'
+                         r"|(?i:\bremember\b|\bdon'?t forget\b|\bdo not forget\b|\bkeep in mind\b|\bmake a note\b|\bnote (?:this|that) down\b)"
+                         r'|覚えて|忘れないで|メモして|記憶して|记住|别忘|不要忘|记下来|记一下)')
 SYS_PREFIX = ('Caveat:', '<task-notification', '<local-command', '[Request interrupted', '[SYSTEM NOTIFICATION',
               'This session is being continued', 'Base directory for this skill')
 
@@ -77,6 +90,17 @@ def registry():
     except OSError:
         pass
     return rows
+
+
+def muted():
+    """[쉬는 프로젝트 슬러그] .active/config 의 mute= (/claude-brain-off here 가 남긴다) - 그 프로젝트의 대화는 되짚지 않는다"""
+    try:
+        for line in open(os.path.join(ACTIVE, 'config'), encoding='utf-8', errors='replace'):
+            if line.startswith('mute='):
+                return {x for x in line.strip()[5:].split(',') if x}
+    except OSError:
+        pass
+    return set()
 
 
 def scope(cwd):
@@ -378,7 +402,7 @@ def awake(a):
     """
     path = arg(a, '--transcript')
     sc = scope(arg(a, '--cwd', ''))
-    if not path or not os.path.isfile(path) or sc is None:
+    if not path or not os.path.isfile(path) or sc is None or sc[1] in muted():
         return 0
     root, slug, stack = sc
     if automated(path):
@@ -416,7 +440,7 @@ def project_dirs(root):
     return [os.path.join(base, key)] + glob.glob(os.path.join(base, key + '-*'))
 
 
-def suggest_register(since_days=7, min_sessions=3, min_prompts=10):
+def suggest_register(since_days=7, min_sessions=3, min_prompts=10, with_time=False):
     """[활발한 미등록 프로젝트]
     - 최근 since_days 일 동안 대화록이 min_sessions 개 이상이고 사람 요청이 min_prompts 개 이상인 등록 안 된 폴더(.git 이 있는 곳)
     """
@@ -450,19 +474,21 @@ def suggest_register(since_days=7, min_sessions=3, min_prompts=10):
                             prompts += 1
         except OSError:
             continue
-        if not cwd or cwd.startswith(('/private/', '/tmp/', '/var/')) or '/.claude' in cwd:
+        if not cwd or plat.is_tmp(cwd) or '/.claude' in plat.norm(cwd):
             continue
-        if any(cwd == r or cwd.startswith(r + '/') for r in regs):
+        if any(plat.under(r, cwd) for r in regs):
             continue
-        top = cwd
-        while top and top != '/' and not os.path.isdir(os.path.join(top, '.git')):
-            top = os.path.dirname(top)
-        if not top or top == '/' or top == os.path.expanduser('~'):
+        top = plat.git_root(cwd)   # 위로 가장 가까운 git 루트 (Windows 드라이브 루트에서도 멈춘다)
+        if not top or plat.key(top) == plat.key(os.path.expanduser('~')) or any(plat.under(r, top) for r in regs):
             continue
-        f = found.setdefault(top, [0, 0])
+        f = found.setdefault(top, [0, 0, 0])
         f[0] += 1
         f[1] += prompts
-    return [(top, s, pr) for top, (s, pr) in found.items() if s >= min_sessions and pr >= min_prompts]
+        f[2] = max(f[2], os.path.getmtime(p))
+    out = [(top, s, pr) for top, (s, pr, _) in found.items() if s >= min_sessions and pr >= min_prompts]
+    if with_time:
+        return sorted(((top, s, pr, found[top][2]) for top, s, pr in out), key=lambda x: -x[3])
+    return out
 
 
 def scan(a):
@@ -474,7 +500,10 @@ def scan(a):
     marks = jload(MARKS, {})
     cand = []
     scanned = 0
+    quiet = muted()
     for root, slug, stack in registry():
+        if slug in quiet:
+            continue
         for dd in project_dirs(root):
             for p in glob.glob(os.path.join(dd, '*.jsonl')):
                 try:

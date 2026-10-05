@@ -66,7 +66,9 @@ GENERIC_IDS = frozenset('fileID guid PrefabInstance MonoBehaviour RectTransform 
                         'spriteMode Assets A_Prefab A_Prefabs A_Scripts A_Res A_Data Editor.log TextMeshProUGUI ScriptableObject '
                         'Debug.Log Debug.LogError Debug.LogWarning UnityEngine UnityEditor System.IO NullReferenceException '
                         'MissingReferenceException ArgumentException InvalidOperationException'.split())
-FILE_TOKEN_RE = re.compile(r'[\w@+.-]+\.(?:cs|prefab|asset|unity|mat|shader|anim|controller|uss|uxml|asmdef|json|ojn|ojm|py|sh|mjs|js|ts)\b')
+# 명령이 다루는 파일 - Unity 자산과 흔한 언어의 소스, 설정 파일. 문서(.md)는 너무 흔해 뺀다
+FILE_TOKEN_RE = re.compile(r'[\w@+.-]+\.(?:cs|prefab|asset|unity|mat|shader|anim|controller|uss|uxml|asmdef|json|ojn|ojm|py|sh|mjs|cjs|js|ts|tsx|jsx'
+                           r'|vue|svelte|go|rs|java|kt|kts|swift|c|cc|cpp|h|hpp|m|mm|rb|php|dart|scala|lua|sql|gradle|toml|ya?ml)\b')
 HEREDOC_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?[^\n]*\n.*?\n\s*\1\s*(?:\n|$)", re.S)
 API_RE = re.compile(r'\b([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)+)\s*[(<]')
 CS_ERR_RE = re.compile(r'([\w.-]+)\.cs\(\d+,\d+\): *(?:error|warning) (CS\d{4}): *([^\n]*)')
@@ -607,23 +609,26 @@ EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max', 'auto')
 
 def _run(args, timeout=4):
     args = plat.argv(args)
-    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
-    return (p.stdout or p.stderr).strip()
+    # 자식 출력은 UTF-8 이다 - Windows 의 시스템 코드 페이지로 풀면 한글, 일본어가 깨진다
+    p = subprocess.run(args, capture_output=True, timeout=timeout, env=dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8'))
+    return (p.stdout or p.stderr).decode('utf-8', 'replace').strip()
 
 
-def control(prompt):
+def control(prompt, cwd=''):
     """[/claude-brain-<명령> 또는 /brain <명령>] - 스크립트만 돌리면 되는 명령을 훅이 바로 처리하고 결과 글을 돌려준다. 그 밖이면 None
-    - 바로 처리: status(인자 없는 /brain 포함), on, off, config [프리셋], model <이름>, effort <값>, stop, sleep, results, app(옛 이름 editor)
+    - 바로 처리: status(인자 없는 /brain 포함), on, off, on here, off here, register, config [프리셋 | lang <언어>], model <이름>, effort <값>,
+      stop, sleep, results, app(옛 이름 editor). cwd 는 훅 입력의 작업 폴더(here, register 가 쓴다)
     - None(모델이 처리): recall, remember, 모르는 명령 - 명령 파일이나 SKILL.md 가 받는다
     """
-    m = CONTROL_RE.match(prompt.strip())
-    if not m:
+    mt = CONTROL_RE.match(prompt.strip())
+    if not mt:
         return None
-    if m.group('b') is not None:
-        w = [m.group('b').lower()] + (m.group('c') or '').lower().split()
+    if mt.group('b') is not None:
+        w = [mt.group('b').lower()] + (mt.group('c') or '').lower().split()
     else:
-        w = (m.group('a') or '').lower().split() or ['status']
+        w = (mt.group('a') or '').lower().split() or ['status']
     cmd, args = w[0], w[1:]
+    from cli_i18n import m   # 사람이 읽는 결과 글 - brain 언어로
     sh = 'bash'   # _run 과 plat.argv 가 Git Bash 와 / 경로로 바꾼다
     cfg = [sh, os.path.join(HERE, 'config.sh')]
     ctl = [sh, os.path.join(HERE, 'hippocampus-ctl.sh')]
@@ -631,26 +636,39 @@ def control(prompt):
         if cmd == 'status' and not args:
             return _run([sh, os.path.join(HERE, 'status.sh')])
         if cmd in ('on', 'off') and not args:
-            return _run(cfg + [cmd]) or 'brain 설정을 바꿨다'
+            return _run(cfg + [cmd]) or m('ctl.changed')
+        if cmd in ('on', 'off') and args == ['here']:
+            # 이 프로젝트만 쉬기/깨우기 - 전체 켜짐과 따로 .active/config 의 mute= 에 슬러그를 넣고 뺀다
+            sc = scope(cwd)
+            if not sc:
+                return m('mu.none')
+            _run(cfg + ['mute' if cmd == 'off' else 'unmute', sc[1]])
+            return m('mu.off' if cmd == 'off' else 'mu.on', sc[1])
+        if cmd == 'register' and not args:
+            # 지금 등록 - 위로 가장 가까운 git 루트를 해마에게 맡긴다(밤의 자동 등록 조건을 기다리지 않는다)
+            out = _run([sys.executable, os.path.join(HERE, 'register.py'), cwd or os.getcwd()], timeout=4)
+            return out or m('rg.fail', '-')
         if cmd == 'config':
             if not args:
-                return _run(cfg + ['show']) + '\n바꾸기: /claude-brain-config default | eco | quality'
+                return _run(cfg + ['show']) + '\n' + m('ctl.change')
             if len(args) == 1 and args[0] in PRESETS:
-                return _run(cfg + ['preset', args[0]]) or 'brain 설정을 바꿨다'
-            return '사용법: /claude-brain-config [default | eco | quality]'
+                return _run(cfg + ['preset', args[0]]) or m('ctl.changed')
+            if len(args) == 2 and args[0] == 'lang' and args[1] in L.LANGS:
+                return _run(cfg + ['lang', args[1]]) or m('ctl.changed')
+            return m('ctl.usage', '/claude-brain-config [default | eco | quality | lang <ko|en|ja|zh>]')
         if cmd == 'model':
             if len(args) == 1 and args[0] in MODELS:
-                return _run(cfg + ['model', args[0]]) or 'brain 설정을 바꿨다'
-            return '사용법: /claude-brain-model sonnet | opus | haiku'
+                return _run(cfg + ['model', args[0]]) or m('ctl.changed')
+            return m('ctl.usage', '/claude-brain-model sonnet | opus | haiku')
         if cmd == 'effort':
             if len(args) == 1 and args[0] in EFFORTS:
-                return _run(cfg + ['effort', args[0]]) or 'brain 설정을 바꿨다'
-            return '사용법: /claude-brain-effort low | medium | high | xhigh | max | auto'
+                return _run(cfg + ['effort', args[0]]) or m('ctl.changed')
+            return m('ctl.usage', '/claude-brain-effort low | medium | high | xhigh | max | auto')
         if cmd == 'stop' and not args:
-            return _run(ctl + ['stop']) or '해마: 지금 항목이 끝나면 멈춘다'
+            return _run(ctl + ['stop']) or m('hc.stop')
         if cmd in ('app', 'editor') and not args:
             # 서버는 세션과 무관한 프로세스로 뜨고 editor.sh 는 주소만 알리고 바로 끝난다(훅 제한 5초)
-            return _run([sh, os.path.join(HERE, 'editor.sh')], timeout=4) or 'brain 앱을 띄우지 못했다: bash %s' % os.path.join(HERE, 'editor.sh')
+            return _run([sh, os.path.join(HERE, 'editor.sh')], timeout=4) or m('ctl.app_fail', plat.norm(os.path.join(HERE, 'editor.sh')))
         if cmd == 'results' and not args:
             return _run(ctl + ['results', '--brief'])
         if cmd == 'sleep' and not args:
@@ -660,9 +678,9 @@ def control(prompt):
             with open(os.path.join(lg, 'sleep-manual.out'), 'a') as out:
                 subprocess.Popen(plat.argv([sh, os.path.join(HERE, 'sleep.sh')]), stdin=subprocess.DEVNULL, stdout=out,
                                  stderr=subprocess.STDOUT, cwd=BRAIN, **plat.detach_kw())
-            return '잠 주기를 시작했다 - 투입만 하고 곧 끝나며 처리는 해마가 뒤에서 한다. 결과: /claude-brain-status'
+            return m('ctl.sleep')
     except Exception as e:
-        return 'brain 명령을 처리하지 못했다: %s' % e.__class__.__name__
+        return m('ctl.error', e.__class__.__name__)
     return None
 
 
@@ -673,6 +691,18 @@ def enabled():
             return not any(l.strip() == 'enabled=0' for l in f)
     except (OSError, ValueError):   # 깨진 설정 파일이면 켜진 것으로 본다(말없이 꺼지지 않게)
         return True
+
+
+def muted():
+    """[쉬는 프로젝트 슬러그] .active/config 의 mute=a,b - /claude-brain-off here 가 남긴다. 그 프로젝트에선 떠올림, 성격, 습관 줄이 모두 쉰다"""
+    try:
+        with open(os.path.join(BRAIN, '.active', 'config'), encoding='utf-8', errors='replace') as f:
+            for line in f:
+                if line.startswith('mute='):
+                    return {x for x in line.strip()[5:].split(',') if x}
+    except (OSError, ValueError):
+        pass
+    return set()
 
 
 _GATE = {}   # PreToolUse 관문 결정(성격) - emit 이 떠올림과 함께 싣고, 떠올림이 없으면 main 이 따로 낸다
@@ -765,13 +795,13 @@ def verify_block(d, sid):
 
 def hook():
     t0 = time.time()
-    raw = sys.stdin.read()
+    raw = sys.stdin.buffer.read().decode('utf-8', 'replace')   # Windows 의 시스템 코드 페이지로 읽으면 한글 요청이 깨진다
     if not raw.strip():
         return 0
     d = json.loads(raw)
     ev = d.get('hook_event_name') or ''
     if ev == 'UserPromptSubmit':
-        r = control(d.get('prompt') or '')
+        r = control(d.get('prompt') or '', d.get('cwd') or '')
         if r:
             # caveman 처럼 제어 명령은 훅이 바로 처리하고 모델에는 넘기지 않는다(토큰 0). reason 은 사용자에게만 보인다
             print(json.dumps({'decision': 'block', 'reason': r}, ensure_ascii=False))
@@ -785,6 +815,11 @@ def hook():
     cwd0 = plat.norm(d.get('cwd') or '')
     if under(BRAIN, cwd0) or under(os.path.realpath(BRAIN), cwd0):
         return 0   # hippocampus 자신의 세션 - 떠올리지도, 열람으로 세지도 않는다(망각 판정이 흐려진다)
+    q = muted()
+    if q:
+        sc0 = scope(cwd0)
+        if sc0 and sc0[1] in q:
+            return 0   # 이 프로젝트는 쉬는 중(/claude-brain-off here)
     if agent and (d.get('agent_type') or '') in SUB_OFF:
         return 0   # 위치 찾기,안내 전용 서브에이전트 - 서브 안 도구 훅에도 agent_id, agent_type 이 온다(2026-09-29 실측)
     sp = state_file(sid, agent)
@@ -933,7 +968,17 @@ def probe(argv):
     return 0
 
 
+def _utf8_out():
+    """[표준 출력을 UTF-8 로] Windows 는 파이프 출력이 시스템 코드 페이지(cp1252, cp949 등)라 한글, 일본어를 쓰다 오류가 나거나 깨진다"""
+    for f in (sys.stdout, sys.stderr):
+        try:
+            f.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main():
+    _utf8_out()
     if len(sys.argv) > 1 and sys.argv[1] == 'probe':
         return probe(sys.argv[2:])
     if len(sys.argv) > 2 and sys.argv[1] == 'scope':

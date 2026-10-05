@@ -48,6 +48,25 @@ def under(root, p):
     return bool(r) and (q == r or q.startswith(r.rstrip('/') + '/'))
 
 
+def git_root(p):
+    """[가장 가까운 git 루트] p 자신이나 위로 .git 이 있는 폴더(norm 표기), 없으면 None. 드라이브 루트, / 에서 멈춘다"""
+    cur = os.path.abspath(p or '.')
+    while True:
+        if os.path.exists(os.path.join(cur, '.git')):
+            return norm(cur)
+        up = os.path.dirname(cur)
+        if up == cur:
+            return None
+        cur = up
+
+
+def is_tmp(p):
+    """[임시 폴더인가] /tmp, /private(macOS 의 /tmp, /var 실체), /var/tmp, /var/folders, Windows 의 TEMP 아래"""
+    q = key(p)
+    roots = ['/tmp', '/private', '/var/tmp', '/var/folders'] + [key(os.environ.get(k) or '') for k in ('TEMP', 'TMP') if os.environ.get(k)]
+    return any(r and (q == r or q.startswith(r.rstrip('/') + '/')) for r in roots)
+
+
 def bash():
     """[bash 실행 파일] Windows 는 Git Bash(Claude Code 가 쓰는 것과 같은 것)를 고른다"""
     if not WIN:

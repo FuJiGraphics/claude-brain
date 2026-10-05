@@ -24,7 +24,10 @@ CX = os.path.join(BRAIN, 'cortex')
 ACTIVE = os.path.join(BRAIN, '.active')
 FIRST_MD = re.compile(r'\]\(([^() ]+\.md)\)')
 TAG_RE = re.compile(r' <!-- dormant (\S+) (\d{4}-\d{2}-\d{2}) -->$')
-SALIENT_RE = re.compile(r'(사용자 결정|함정|사고|손실|파괴)')
+# 두드러진 기억(늦게 잊는다) - 해마가 대화 언어로 쓰므로 네 언어의 표식을 함께 본다
+SALIENT_RE = re.compile(r'(사용자 결정|함정|사고|손실|파괴'
+                        r'|(?i:\buser decision\b|\bpitfall|\bgotcha|\bincident\b|\bdata loss\b|\bdestructive\b|\boutage\b)'
+                        r'|ユーザー決定|ユーザーの決定|落とし穴|事故|損失|破壊|用户决定|踩坑|事故|损失|破坏)')
 DORMANT_HEAD = ('# 잠재 기억 - 오래 안 쓰여 자동 떠올림에서 빠진 기억\n\n'
                 '> forget.py 가 옮긴 인덱스 줄이다. 본문은 그대로 있고, 다시 쓰이면 원래 인덱스로 돌아간다. 줄 끝 주석 = 원래 파일과 숨긴 날.\n\n')
 
