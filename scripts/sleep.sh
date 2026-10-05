@@ -14,7 +14,8 @@ BRAIN="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$BRAIN"
 . "$BRAIN/scripts/_lib.sh"
 nw_need_python
-if grep -qs '^enabled=0' "$BRAIN/.active/config"; then echo "brain 꺼짐 - 잠 건너뜀 (/brain on)"; exit 0; fi
+nw_i18n sl
+if grep -qs '^enabled=0' "$BRAIN/.active/config"; then nw_say sl_off; exit 0; fi
 CX="$BRAIN/cortex"
 C="$CX/.hippocampus"
 S="$C/sleep"
@@ -24,10 +25,10 @@ REPLAY_MAX=4; REPLAY_MIN_SCORE=6; SWEEP_N=3; MISS_MIN=5; FIRST_WINDOW_DAYS=2; FO
 mkdir -p "$S/req" "$C/logs"
 LOCK="$S/lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
-  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +360 2>/dev/null)" ]; then rm -rf "$LOCK"; mkdir "$LOCK" || exit 0; else echo "잠 주기 실행 중 - 건너뜀"; exit 0; fi
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +360 2>/dev/null)" ]; then rm -rf "$LOCK"; mkdir "$LOCK" || exit 0; else nw_say sl_running; exit 0; fi
 fi
 trap 'rm -rf "$LOCK"' EXIT
-echo "== 잠 $(date '+%F %T')"
+nw_say sl_start "$(date '+%F %T')"
 rm -f "$S/req"/*.json
 
 # 1. 기억 강도, 검색 실패
@@ -35,7 +36,7 @@ nw_py "$BRAIN/scripts/sleep-stats.py" --misses-out "$S/misses.md" | tail -1
 
 # 2. 망각 - 인덱스를 고치므로 hippocampus 가 쉬고 있을 때만
 if nw_pid_is "$(cat "$C/lock/pid" 2>/dev/null)" hippocampus-daemon; then
-  echo "망각 건너뜀 - hippocampus 가 일하는 중"
+  nw_say sl_forget_skip
 elif [ "$DRY" = 1 ]; then
   nw_py "$BRAIN/scripts/forget.py" --days "$FORGET_DAYS" --salient-days "$FORGET_SALIENT_DAYS" --dry-run | tail -1
 else
@@ -55,7 +56,7 @@ json.dump({"mode": "targeted", "project_root": "", "slug": "-", "stack": "-", "c
                        "instruction": "세션이 앞 이름으로 찾다 실패하고 뒤 이름으로 찾은 짝 목록이다. 같은 것을 가리키는 짝이면 common/search-aliases.md 에 별칭을 더하거나 해당 인덱스 줄에 그 말을 단서로 넣는다. 우연한 짝과 이미 반영된 짝은 건너뛴다."}},
           open(sys.argv[1], "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 PY
-  echo "검색 실패 짝 ${nmiss}개 - 학습 요청"
+  nw_say sl_miss "$nmiss"
 fi
 
 # 5. 조각 정비
@@ -64,7 +65,7 @@ nw_py "$BRAIN/scripts/slices.py" --nb "$CX" --due "$SWEEP_N" > "$S/due.json" \
 
 # 투입: 등록 → 재생 → 실패 학습 → 정비 순(새 기억을 먼저 새기고 정리한다)
 if [ "$DRY" = 1 ]; then
-  echo "(dry-run) 투입하지 않음: $(ls "$S/req"/*.json 2>/dev/null | wc -l | tr -d ' ')건"
+  nw_say sl_dry "$(ls "$S/req"/*.json 2>/dev/null | wc -l | tr -d ' ')"
 else
   for r in "$S/req"/register-*.json "$S/req"/replay-*.json "$S/req"/misses.json "$S/req"/req-*.json; do
     [ -f "$r" ] && bash "$BRAIN/scripts/hippocampus-enqueue.sh" "$r" | head -1
@@ -76,13 +77,18 @@ fi
 nw_py "$BRAIN/scripts/check.py" --nb "$CX" > "$S/check.txt" 2>&1
 head -1 "$S/check.txt"
 
+# 6b. 새 버전 확인(하루 한 번, 네트워크 - 설정 update_check=0 이면 건너뛴다)과 사용량 기록 정리
+[ "$DRY" = 0 ] && nw_py "$BRAIN/scripts/update.py" check >/dev/null 2>&1
+nw_py "$BRAIN/scripts/usage.py" prune >/dev/null 2>&1
+
 # 7. 요약 - 사람에게 따로 띄우지 않는다(사용자 결정 2026-09-29). 잠 로그와 sleep/last-summary.txt 에만 남기고 /brain status 로 본다
 HV="$(claude --version 2>/dev/null | head -1 | sed -n 's/^\([0-9][0-9.]*\).*/\1/p' | tr . -)"
 CV="$(sed -n 's/^checked_version:[[:space:]]*claude-code_\([0-9-]*\)_agent.*/\1/p' "$CX/common/harness-routing.md" 2>/dev/null | head -1)"
-if [ -n "$HV" ] && [ -n "$CV" ] && [ "$HV" != "$CV" ]; then echo "하네스 버전 변경: 기록 $CV, 현재 $HV" > "$S/notice-harness.txt"; else rm -f "$S/notice-harness.txt"; fi
+# 두 값만 남긴다 - status.sh 가 brain 언어로 알린다
+if [ -n "$HV" ] && [ -n "$CV" ] && [ "$HV" != "$CV" ]; then echo "$CV $HV" > "$S/notice-harness.txt"; else rm -f "$S/notice-harness.txt"; fi
 fails="$(find "$C/done" -name '*.json' ! -name '*.request.json' -mtime -1 -exec grep -l '"status": *"\(failed\|denied\|timeout\)"' {} + 2>/dev/null | wc -l | tr -d ' ')"
 msg=""
-[ "${fails:-0}" -gt 0 ] && msg="해마 실패,거부 ${fails}건"
-if [ "$DRY" = 0 ]; then echo "$(date '+%F %T') ${msg:-이상 없음}" > "$S/last-summary.txt"; fi
-[ -n "$msg" ] && echo "요약: $msg"
-echo "== 끝 $(date '+%T')"
+[ "${fails:-0}" -gt 0 ] && msg="$(nw_say sl_fails "$fails")"
+if [ "$DRY" = 0 ]; then echo "$(date '+%F %T') ${msg:-$M_sl_ok}" > "$S/last-summary.txt"; fi
+[ -n "$msg" ] && nw_say sl_sum "$msg"
+nw_say sl_end "$(date '+%T')"

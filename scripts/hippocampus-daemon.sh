@@ -81,21 +81,25 @@ d["retried"] = True; json.dump(d, open(p, "w", encoding='utf-8'), ensure_ascii=F
 PY
   then mv "$f" "$C/queue/" && echo "회수: $rid (이전 데몬이 처리 중 종료 - 1회 재시도)"
   else
-    nw_py - "$C/done/$rid.json" "$rid" <<'PY'
+    nw_py - "$C/done/$rid.json" "$rid" "$SKILL/scripts" <<'PY'
 import json, sys, datetime
-json.dump({"id": sys.argv[2], "status": "failed", "summary": "두 번 연속 처리 중 데몬이 종료됐다 - 재시도하지 않고 마감. 요청은 done/<id>.request.json", "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}, open(sys.argv[1], "w", encoding='utf-8'), ensure_ascii=False, indent=1)
+sys.path.insert(0, sys.argv[3])
+from cli_i18n import m
+json.dump({"id": sys.argv[2], "status": "failed", "summary": m("dm.twice"), "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}, open(sys.argv[1], "w", encoding='utf-8'), ensure_ascii=False, indent=1)
 PY
     mv "$f" "$C/done/$rid.request.json"; echo "마감: $rid (재시도 후에도 처리 중 종료 - failed)"
   fi
 done
 
 write_fallback_done() {   # $1 status  $2 rc  - hippocampus 가 done 파일을 못 남겼을 때 데몬이 대신 쓴다
-  nw_py - "$done_file" "$id" "$2" "$log" "$1" <<'PY'
+  nw_py - "$done_file" "$id" "$2" "$log" "$1" "$SKILL/scripts" <<'PY'
 import json, sys, datetime, os
 p, id_, rc, log, status = sys.argv[1:6]
+sys.path.insert(0, sys.argv[6])
+from cli_i18n import m
 tail = open(log, encoding='utf-8', errors='replace').read()[-1500:] if os.path.exists(log) else ''
 json.dump({"id": id_, "status": status,
-           "summary": f"hippocampus 실행이 결과 파일을 남기지 않았다 (exit {rc}, 판정 {status}). 로그 꼬리:\n{tail}",
+           "summary": m("dm.noresult", rc, status) + "\n" + tail,
            "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat()},
           open(p, "w", encoding='utf-8'), ensure_ascii=False, indent=1)
 PY
@@ -176,9 +180,10 @@ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("project_root",""))
     done
     wait "$cpid"; rc=$?; rm -f "$C/lock/child"
     # `--output-format json` 의 결과에서 사람이 읽을 본문($log)과 권한 거부 건수를 뽑는다. JSON 이 아니면(형식 변경) 원문을 그대로 로그로.
-    denials="$(nw_py - "$raw" "$log" <<'PY'
+    denials="$(nw_py - "$raw" "$log" "$SKILL/scripts" "${mode:-?}" <<'PY'
 import json, os, sys
 raw, log = sys.argv[1], sys.argv[2]
+sys.path.insert(0, sys.argv[3])
 txt = open(raw, encoding='utf-8', errors='replace').read() if os.path.exists(raw) else ''
 err = open(log + '.err', encoding='utf-8', errors='replace').read() if os.path.exists(log + '.err') else ''
 try:
@@ -186,6 +191,11 @@ try:
 except Exception:
     d = None
 if isinstance(d, dict):
+    try:   # 사용량 한 줄 (.active/usage.jsonl) - 앱과 /claude-brain-status 가 모아 보인다
+        import usage
+        usage.record('hippo', sys.argv[4], d)
+    except Exception:
+        pass
     out = str(d.get('result', ''))
     den = d.get('permission_denials') or []
     if d.get('is_error') or d.get('subtype') not in (None, 'success'):
