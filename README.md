@@ -161,7 +161,7 @@ Most of them are handled by the hook directly and use no tokens. Output follows 
 
 ## Cost and privacy
 
-- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most), a one-line habit reminder with each request, and the memories recalled while you work (about 2,000 characters per session on average, capped at 9,000). Each hook call takes about 25 ms.
+- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most), a one-line habit reminder with each request, and the memories recalled while you work (about 2,000 characters per session on average, capped at 9,000). Altogether that came to about 15,000 characters per session (roughly 4,000 to 5,000 tokens) on the author's machine. Each hook call takes about 25 ms.
 - The hippocampus uses your Claude usage. It runs `claude -p` once per job (Sonnet 5.5 at medium effort by default). On the demo memory store we measured $0.06 to $0.13 per recording job and $0.05 to $0.11 per tidy-up job, at API prices. Real projects with more memories cost a bit more. To spend less, try `/claude-brain-config eco`.
 - The app's AI features (bubbles, plain-word explanations, asking) call Claude Haiku at about $0.002 to $0.004 per call. Explanations are cached.
 - You can check what was spent at any time in `/claude-brain-status` or in the app's "Usage" card. On a Pro or Max plan this is a measure of how much was used, not what you are billed.
