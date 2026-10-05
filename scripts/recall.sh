@@ -11,9 +11,10 @@ BRAIN="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$BRAIN"
 . "$BRAIN/scripts/_lib.sh"
 nw_need_python
+nw_i18n rc
 ROOT="$PWD"
-if [ "${1:-}" = "--root" ]; then ROOT="${2:?사용법: recall.sh [--root <경로>] <이름>...}"; shift 2; fi
-[ $# -ge 1 ] || { echo "사용법: recall.sh [--root <경로>] <이름>..."; exit 2; }
+if [ "${1:-}" = "--root" ]; then [ -n "${2:-}" ] || { nw_say rc_usage; exit 2; }; ROOT="$2"; shift 2; fi
+[ $# -ge 1 ] || { nw_say rc_usage; exit 2; }
 SC="$(nw_py "$BRAIN/scripts/thalamus.py" scope "$ROOT")"
 SLUG="$(printf '%s' "$SC" | cut -f2)"; STACK="$(printf '%s' "$SC" | cut -f3)"
 [ -n "$SLUG" ] || SLUG="?"; [ -n "$STACK" ] || STACK="-"

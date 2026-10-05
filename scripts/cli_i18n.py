@@ -82,6 +82,7 @@ TEXT = {
         'ed.url': 'brain 앱: %s',
         'ed.local': '(이 컴퓨터에서만 열려요. 끄기: bash %s stop)',
         'ed.restart': '새 버전으로 앱을 다시 띄웠어요',
+        'ed.front': '열려 있던 앱 창을 앞으로 가져왔어요',
         # install.sh
         'in.loc_stop': '중단: brain 은 %s/skills 에 있는데 설정 폴더는 %s 예요. CLAUDE_CONFIG_DIR=%s 로 다시 실행해 주세요',
         'in.lang': '언어: %s (바꾸기: /claude-brain-config lang <ko|en|ja|zh> 또는 앱 설정)',
@@ -188,6 +189,7 @@ TEXT = {
         'ed.url': 'brain app: %s',
         'ed.local': '(Only this computer can open it. To close: bash %s stop)',
         'ed.restart': 'Restarted the app on the new version',
+        'ed.front': 'Brought the open app window to the front',
         'in.loc_stop': 'Stopped: brain is in %s/skills but the config folder is %s. Run again with CLAUDE_CONFIG_DIR=%s',
         'in.lang': 'Language: %s (change it with /claude-brain-config lang <ko|en|ja|zh> or in the app settings)',
         'in.hook_fail': 'Stopped: could not register the hooks. Check %s and run again (CLAUDE.md and the nightly schedule were not touched)',
@@ -289,6 +291,7 @@ TEXT = {
         'ed.url': 'brain アプリ: %s',
         'ed.local': '(このコンピューターでのみ開けます。閉じる: bash %s stop)',
         'ed.restart': '新しいバージョンでアプリを起動し直しました',
+        'ed.front': '開いていたアプリのウィンドウを前に出しました',
         'in.loc_stop': '中断: brain は %s/skills にありますが、設定フォルダは %s です。CLAUDE_CONFIG_DIR=%s で実行し直してください',
         'in.lang': '言語: %s (変更: /claude-brain-config lang <ko|en|ja|zh> またはアプリの設定)',
         'in.hook_fail': '中断: フックを登録できませんでした。%s を確認してからもう一度実行してください(CLAUDE.md と夜の予約は変更していません)',
@@ -390,6 +393,7 @@ TEXT = {
         'ed.url': 'brain 应用: %s',
         'ed.local': '(只能在这台电脑上打开。关闭: bash %s stop)',
         'ed.restart': '已用新版本重新启动应用',
+        'ed.front': '已把打开着的应用窗口切到最前面',
         'in.loc_stop': '已中止: brain 在 %s/skills,但配置文件夹是 %s。请用 CLAUDE_CONFIG_DIR=%s 重新运行',
         'in.lang': '语言: %s (更改: /claude-brain-config lang <ko|en|ja|zh> 或应用设置)',
         'in.hook_fail': '已中止: 无法注册钩子。请检查 %s 后重新运行(没有改动 CLAUDE.md 和夜间计划)',
@@ -660,6 +664,40 @@ CMD['ja'].update({'register': ('このプロジェクトを今すぐ登録 - 夜
 CMD['zh'].update({'register': ('立即登记这个项目 - 不用等夜间自动登记', ''),
                   'update': ('更新 brain - 获取新版本并重新安装(记忆保留)', ''),
                   'backup': ('备份记忆 - 把记忆和性格打包成一个 zip(换电脑时也用)', '')})
+
+# ---------------------------------------------------------------- 큐 투입, 기억시키기, 기억 찾기 (도구 출력 - 사용자도 본다)
+TEXT['ko'].update({
+    'eq.need': '오류: 요청 JSON 경로가 필요해요', 'eq.queued': '큐 투입: %s', 'eq.running': '해마가 일하는 중이라 큐에 쌓아 뒀어요 (pid %s, 지금: %s)',
+    'eq.started': '해마를 깨웠어요 (pid %s) - 로그 %s', 'eq.start_fail': '오류: 해마를 띄우지 못했어요. 큐에는 남아 있어요. 직접 실행: bash %s',
+    'eq.perm': '알림: 권한 모드가 %s 라서 기억 쓰기가 거부돼요 (결과는 denied). 되돌리려면 %s 에 bypassPermissions 를 적어 주세요',
+    'eq.unset': '미설정', 'eq.badjson': '오류: done 파일을 JSON 으로 읽지 못했어요: %s', 'eq.timeout': '%s초를 기다려도 끝나지 않았어요. 나중에 /claude-brain-status 로 확인해 주세요',
+    'rm.usage': '사용법: remember.sh "<내용과 근거>" ...', 'rm.evidence': '사용자가 /claude-brain-remember 로 직접 남기라고 한 내용',
+    'rc.usage': '사용법: recall.sh [--root <경로>] <이름>...',
+})
+TEXT['en'].update({
+    'eq.need': 'Error: a request JSON path is required', 'eq.queued': 'Queued: %s', 'eq.running': 'The hippocampus is busy, so this was queued (pid %s, working on: %s)',
+    'eq.started': 'Woke the hippocampus (pid %s) - log %s', 'eq.start_fail': 'Error: could not start the hippocampus. The job stays in the queue. Run it directly: bash %s',
+    'eq.perm': 'Note: the permission mode is %s, so memory writes are denied (the result will be denied). To change it, write bypassPermissions to %s',
+    'eq.unset': 'not set', 'eq.badjson': 'Error: could not read the done file as JSON: %s', 'eq.timeout': 'Not finished after %s seconds. Check later with /claude-brain-status',
+    'rm.usage': 'Usage: remember.sh "<what and evidence>" ...', 'rm.evidence': 'The user asked brain to remember this directly with /claude-brain-remember',
+    'rc.usage': 'Usage: recall.sh [--root <path>] <name>...',
+})
+TEXT['ja'].update({
+    'eq.need': 'エラー: 要求 JSON のパスが必要です', 'eq.queued': 'キューに追加: %s', 'eq.running': '海馬が作業中なのでキューに積みました (pid %s、作業中: %s)',
+    'eq.started': '海馬を起こしました (pid %s) - ログ %s', 'eq.start_fail': 'エラー: 海馬を起動できませんでした。キューには残っています。直接実行: bash %s',
+    'eq.perm': 'お知らせ: 権限モードが %s なので記憶の書き込みは拒否されます (結果は denied)。戻すには %s に bypassPermissions と書いてください',
+    'eq.unset': '未設定', 'eq.badjson': 'エラー: done ファイルを JSON として読めませんでした: %s', 'eq.timeout': '%s 秒待っても終わりませんでした。あとで /claude-brain-status で確認してください',
+    'rm.usage': '使い方: remember.sh "<内容と根拠>" ...', 'rm.evidence': 'ユーザーが /claude-brain-remember で直接覚えるよう頼んだ内容',
+    'rc.usage': '使い方: recall.sh [--root <パス>] <名前>...',
+})
+TEXT['zh'].update({
+    'eq.need': '错误: 需要请求 JSON 的路径', 'eq.queued': '已加入队列: %s', 'eq.running': '海马正在工作,已加入队列 (pid %s,正在处理: %s)',
+    'eq.started': '已唤醒海马 (pid %s) - 日志 %s', 'eq.start_fail': '错误: 无法启动海马。任务仍在队列中。直接运行: bash %s',
+    'eq.perm': '提示: 权限模式是 %s,写入记忆会被拒绝 (结果为 denied)。要改回请在 %s 中写入 bypassPermissions',
+    'eq.unset': '未设置', 'eq.badjson': '错误: 无法把 done 文件读成 JSON: %s', 'eq.timeout': '等待 %s 秒仍未完成。请稍后用 /claude-brain-status 查看',
+    'rm.usage': '用法: remember.sh "<内容和依据>" ...', 'rm.evidence': '用户用 /claude-brain-remember 直接要求记住的内容',
+    'rc.usage': '用法: recall.sh [--root <路径>] <名称>...',
+})
 
 
 def lang_now(lang=None):

@@ -7,18 +7,19 @@ BRAIN="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$BRAIN"
 . "$BRAIN/scripts/_lib.sh"
 nw_need_python
+nw_i18n rm
 ROOT="$PWD"
 if [ "${1:-}" = "--root" ]; then ROOT="${2:?}"; shift 2; fi
-[ $# -ge 1 ] || { echo "사용법: remember.sh \"<내용과 근거>\" ..."; exit 2; }
+[ $# -ge 1 ] || { nw_say rm_usage; exit 2; }
 SC="$(nw_py "$BRAIN/scripts/thalamus.py" scope "$ROOT")"
 REQ="$BRAIN/cortex/.hippocampus/remember-$$.json"
 mkdir -p "$BRAIN/cortex/.hippocampus"
-nw_py - "$REQ" "$SC" "$@" <<'PY'
+nw_py - "$REQ" "$SC" "$M_rm_evidence" "$@" <<'PY'
 import json, sys
-out, sc, items = sys.argv[1], sys.argv[2], sys.argv[3:]
+out, sc, ev, items = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 root, slug, stack = (sc.split('\t') + ['', '-', '-'])[:3] if sc else ('', '-', '-')
 json.dump({"mode": "record", "project_root": root, "slug": slug or '-', "stack": stack or '-', "caller": "brain-remember",
-           "payload": {"proposals": [{"what": x, "evidence": "사용자가 /brain 으로 직접 남기라고 한 내용"} for x in items]}},
+           "payload": {"proposals": [{"what": x, "evidence": ev} for x in items]}},
           open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 PY
 bash "$BRAIN/scripts/hippocampus-enqueue.sh" "$REQ" | head -1

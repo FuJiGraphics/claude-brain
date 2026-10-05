@@ -222,11 +222,11 @@ def main():
         if not m or not re.fullmatch(r'claude-code_\S+', m.group(1)):
             P['harness-routing checked_version 형식'].append('common/harness-routing.md')
         nums = set(re.findall(r'^[|] *([0-9]+) *[|]', hr, re.M))
-        for need in ('1', '2', '4', '6', '8', '12'):
+        for need in ('1', '12'):   # 다른 파일이 번호로 가리키는 행 (해마 지침, 데몬 주석)
             if need not in nums:
                 P['harness-routing 표 번호 누락'].append('#' + need)
-        for sec in ('## 3. [깨짐] 기록', '## 5. 실측 기록'):
-            if sec not in hr:
+        for sec in ('## 3.', '## 5.'):   # 절 제목은 골격 언어마다 다르다 - 번호로 본다 ([깨짐] 기록, 실측 기록)
+            if not re.search(r'^' + re.escape(sec) + r' ', hr, re.M):
                 P['harness-routing 절 누락'].append(sec)
     # 단계 카드의 제목,트리거 줄 형식은 스크립트가 읽지 않고 세션의 모델이 읽으므로 참고로 둔다. 카드 파일 존재(죽은 링크)와 INDEX 링크만 파손이다.
     LEVEL = {

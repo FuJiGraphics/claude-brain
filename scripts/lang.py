@@ -22,6 +22,7 @@ MARK = {'ko': '[기억]', 'en': '[memory]', 'ja': '[記憶]', 'zh': '[记忆]'}
 
 T = {
     'ko': {
+        'full': '(… 전문: %s)',
         'legend': '지도의 색인 파일(lessons-index-*, gotchas-*, patterns-*, facts*)에 과거에 확인한 함정, 결정, 구조가 모여 있다. 링크는 각 지도 파일이 있는 폴더 기준이다.',
         'recall': '[기억] %s 에 대해 기억나는 것(과거에 확인한 사실이라 지금 코드와 다를 수 있다). 기억 저장소: %s',
         'orient': '[기억] 이 폴더는 %s 프로젝트다(%s). [기억] 으로 시작하는 메시지는 이 프로젝트에 대한 장기 기억이다(과거에 확인한 사실, 지금 코드와 다를 수 있다). 기억 저장소: %s',
@@ -38,6 +39,7 @@ T = {
         'claude_md': '## 기억\n\n- `[기억]`, `[memory]`, `[記憶]`, `[记忆]` 로 시작하는 메시지는 이 사용자와 함께 쌓아 온 장기 기억이다 - 과거에 직접 확인한 사실이라 믿고 판단 재료로 쓴다. 지금 코드와 다르면 지금 코드가 기준이다.',
     },
     'en': {
+        'full': '(… full text: %s)',
         'legend': 'The map\'s index files (lessons-index-*, gotchas-*, patterns-*, facts*) collect pitfalls, decisions and structure verified in the past. Links are relative to each map file\'s folder.',
         'recall': '[memory] What I remember about %s (facts verified in the past - the current code may differ). Memory store: %s',
         'orient': '[memory] This folder is the %s project (%s). Messages starting with [memory] are long-term memory about this project (facts verified in the past, the current code may differ). Memory store: %s',
@@ -54,6 +56,7 @@ T = {
         'claude_md': '## Memory\n\n- Messages starting with `[memory]`, `[기억]`, `[記憶]` or `[记忆]` are long-term memory built up with this user - facts verified in the past; trust them as input for your judgement. If they differ from the current code, the current code wins.',
     },
     'ja': {
+        'full': '(… 全文: %s)',
         'legend': 'マップの索引ファイル(lessons-index-*, gotchas-*, patterns-*, facts*)に、過去に確認した落とし穴、決定、構造がまとまっている。リンクは各マップファイルのフォルダ基準。',
         'recall': '[記憶] %s について覚えていること(過去に確認した事実で、今のコードと違う場合がある)。記憶の保存先: %s',
         'orient': '[記憶] このフォルダは %s プロジェクト(%s)。[記憶] で始まるメッセージはこのプロジェクトの長期記憶(過去に確認した事実で、今のコードと違う場合がある)。記憶の保存先: %s',
@@ -70,6 +73,7 @@ T = {
         'claude_md': '## 記憶\n\n- `[記憶]`、`[memory]`、`[기억]`、`[记忆]` で始まるメッセージは、このユーザーと積み上げてきた長期記憶 - 過去に直接確認した事実として信頼し、判断材料にする。今のコードと違えば今のコードが基準。',
     },
     'zh': {
+        'full': '(… 全文: %s)',
         'legend': '地图的索引文件(lessons-index-*, gotchas-*, patterns-*, facts*)汇集了过去确认过的陷阱、决定和结构。链接以各地图文件所在文件夹为准。',
         'recall': '[记忆] 关于 %s 记得的内容(过去确认过的事实,可能与当前代码不同)。记忆存储: %s',
         'orient': '[记忆] 这个文件夹是 %s 项目(%s)。以 [记忆] 开头的消息是关于这个项目的长期记忆(过去确认过的事实,可能与当前代码不同)。记忆存储: %s',
@@ -88,12 +92,18 @@ T = {
 }
 
 # 해마 지침 끝에 붙이는 언어 절 (지침 본문은 한국어 하나로 둔다). 두 자리 모두 설정 언어 이름이 들어간다
-BRIEF = ('\n## 기억 언어\n\n- 기억 본문과 인덱스 줄은 대화에서 사용자가 쓴 언어로 쓴다. 대화 언어를 가리기 어렵거나 여러 언어가 섞이면 %s 로 쓴다.\n'
-         '- 이미 다른 언어로 쓰인 기억은 번역하지 않는다. 파일 이름(슬러그)은 언어와 상관없이 영어 소문자와 하이픈으로 쓴다.\n'
+BRIEF = ('\n## 기억 언어\n\n'
+         '- 설정 언어는 %s 다. 대화가 있는 일(replay, 대화에서 온 record)은 대화에서 사용자가 쓴 언어로 쓰고, 대화 언어를 가리기 어렵거나 '
+         '대화가 없는 일(register, sweep, targeted, harness-refresh, 앱에서 온 피드백)은 설정 언어로 쓴다.\n'
+         '- 이 언어 규칙은 네가 새로 쓰는 모든 글에 적용된다: 기억 본문, 인덱스 줄, registry 비고, 새로 만드는 골격 파일(INDEX.md, facts.md, '
+         'lessons-index.md, scripts/INDEX.md)의 제목, 설명, 표 머리, 근거 줄과 verified 푸터의 설명 낱말. 기존 파일이 다른 언어로 쓰여 있어도 '
+         '그 언어를 따라 하지 않는다 - 구조(링크, 절 순서, 형식)만 본뜬다. 이미 있는 줄은 번역하지 않는다.\n'
+         '- 파일 이름(슬러그)은 언어와 상관없이 영어 소문자와 하이픈으로 쓴다.\n'
          '- 본문 머리 표식도 그 언어로 쓴다: 사용자 결정 = User decision = ユーザー決定 = 用户决定, 함정 = pitfall = 落とし穴 = 踩坑 '
          '(forget.py 가 네 언어의 표식을 모두 알아보고 120일 동안 남긴다).\n'
-         '- 결과 요약(done 파일의 summary)은 사용자가 앱 일지와 /claude-brain-results 에서 읽는 글이라 %s 로 쓴다. \'돌려줄 것\' 형식의 머리말과 항목 이름도 '
-         '그 언어로 옮기고, 슬러그, 경로, 모드 이름(record 등), 숫자는 그대로 둔다.\n')
+         '- 결과 요약(done 파일의 summary)은 사용자가 앱 일지와 /claude-brain-results 에서 읽는 글이라 첫 줄부터 끝 줄까지 모두 %s 로 쓴다. '
+         "'돌려줄 것' 형식의 머리말(정비 결과, 등록 완료, 합계, 검사, 파괴적 항목 등)과 표 머리도 그 언어로 옮기고, 슬러그, 경로, 모드 이름(record 등), "
+         '숫자는 그대로 둔다.\n')
 
 
 def brief(lang=None):

@@ -23,6 +23,47 @@ import sys
 import time
 from bisect import bisect_right
 
+# ---------------------------------------------------------------- 출력 문구 (brain 언어 - recall.sh 결과는 사용자도 본다)
+LB = {
+    'ko': {'nofile': '   (본문 파일 없음: %s)', 'seen': '   --- 본문: %s (이미 이 세션에 출력됨 - 필요하면 Read)', 'body': '   --- 본문: %s (%d 줄)',
+           'cut': '   | … (이하 생략 - 전문은 위 경로)', 'alias': '(별칭: %s) ', 'norm': '(정규화 일치) ', 'words': '(단어 일치: %s) ',
+           'hit': '히트: %s:%d', 'more_hit_slug': '추가 히트: %s:%d [%s]', 'more_hit': '추가 히트: %s:%d', 'rest': '그 외 히트 %d건 (표시 생략)',
+           'place': '%s (%d곳)', 'others': ' 외 %d개', 'mention': '본문 언급(인덱스 밖, 노트북 기준): %s%s', 'cand': '본문 후보(인덱스 밖): %s (%d곳) - …%s…',
+           'cand_more': '본문 후보 그 외 %d개 파일', 'rel_cand': '연관 후보(단어 일부 %s): %s - …%s…', 'rel_hit': '연관 후보(단어 일부 %s): %s:%d',
+           'rel_body': '연관 본문(단어 일부 %s): %s - %s', 'check': '대조: "%s" → 히트 %d (log #%s)', 'log': '기록: %s'},
+    'en': {'nofile': '   (memory file missing: %s)', 'seen': '   --- memory: %s (already shown in this session - Read it if needed)', 'body': '   --- memory: %s (%d lines)',
+           'cut': '   | … (rest omitted - full text at the path above)', 'alias': '(alias: %s) ', 'norm': '(normalized match) ', 'words': '(word match: %s) ',
+           'hit': 'hit: %s:%d', 'more_hit_slug': 'more hits: %s:%d [%s]', 'more_hit': 'more hits: %s:%d', 'rest': '%d more hits (not shown)',
+           'place': '%s (%d places)', 'others': ' and %d more', 'mention': 'mentioned in memory files (outside indexes): %s%s', 'cand': 'memory file candidate (outside indexes): %s (%d places) - …%s…',
+           'cand_more': '%d more candidate files', 'rel_cand': 'related candidate (partial words %s): %s - …%s…', 'rel_hit': 'related candidate (partial words %s): %s:%d',
+           'rel_body': 'related memory (partial words %s): %s - %s', 'check': 'searched: "%s" → %d hits (log #%s)', 'log': 'log: %s'},
+    'ja': {'nofile': '   (記憶ファイルがありません: %s)', 'seen': '   --- 記憶: %s (このセッションで表示済み - 必要なら Read)', 'body': '   --- 記憶: %s (%d 行)',
+           'cut': '   | … (以下省略 - 全文は上のパス)', 'alias': '(別名: %s) ', 'norm': '(正規化一致) ', 'words': '(単語一致: %s) ',
+           'hit': 'ヒット: %s:%d', 'more_hit_slug': '追加ヒット: %s:%d [%s]', 'more_hit': '追加ヒット: %s:%d', 'rest': 'ほかのヒット %d 件 (表示省略)',
+           'place': '%s (%d か所)', 'others': ' ほか %d 件', 'mention': '記憶本文での言及(索引の外): %s%s', 'cand': '本文の候補(索引の外): %s (%d か所) - …%s…',
+           'cand_more': '本文の候補 ほか %d ファイル', 'rel_cand': '関連候補(単語の一部 %s): %s - …%s…', 'rel_hit': '関連候補(単語の一部 %s): %s:%d',
+           'rel_body': '関連する記憶(単語の一部 %s): %s - %s', 'check': '照合: "%s" → ヒット %d (log #%s)', 'log': '記録: %s'},
+    'zh': {'nofile': '   (记忆文件不存在: %s)', 'seen': '   --- 记忆: %s (本会话已显示 - 需要时用 Read)', 'body': '   --- 记忆: %s (%d 行)',
+           'cut': '   | … (以下省略 - 全文见上面的路径)', 'alias': '(别名: %s) ', 'norm': '(规范化匹配) ', 'words': '(单词匹配: %s) ',
+           'hit': '命中: %s:%d', 'more_hit_slug': '更多命中: %s:%d [%s]', 'more_hit': '更多命中: %s:%d', 'rest': '另外 %d 个命中 (未显示)',
+           'place': '%s (%d 处)', 'others': ' 等 %d 个', 'mention': '记忆正文中提到(索引之外): %s%s', 'cand': '正文候选(索引之外): %s (%d 处) - …%s…',
+           'cand_more': '正文候选 另外 %d 个文件', 'rel_cand': '相关候选(部分单词 %s): %s - …%s…', 'rel_hit': '相关候选(部分单词 %s): %s:%d',
+           'rel_body': '相关记忆(部分单词 %s): %s - %s', 'check': '查找: "%s" → 命中 %d (log #%s)', 'log': '记录: %s'},
+}
+_LANG = []
+
+
+def _t(key, *args):
+    """[출력 문구] brain 언어(.active/config 의 lang=)로. 못 읽으면 한국어"""
+    if not _LANG:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import lang as _lang_mod
+            _LANG.append(_lang_mod.current())
+        except Exception:
+            _LANG.append('ko')
+    return (LB.get(_LANG[0]) or LB['ko'])[key] % args
+
 # ---- 조정값 (근거는 REPORT.md 의 조정 절) ----
 LINE_MAX = 300          # 히트 줄이 이보다 길면 첫 링크 + 일치 앞뒤 창으로 줄인다
 HEAD_LINK_MAX = 160     # 첫 링크가 이 위치 안에서 끝나면 줄 머리부터 링크까지 보여 준다
@@ -1071,14 +1112,14 @@ def body_lines(path, bodies_seen, terms):
     """
     doc = load_doc(path)
     if doc is None:
-        return ['   (본문 파일 없음: %s)' % disp(path)], False
+        return [_t('nofile', disp(path))], False
     if path in bodies_seen:
-        return ['   --- 본문: %s (이미 이 세션에 출력됨 - 필요하면 Read)' % disp(path)], False
+        return [_t('seen', disp(path))], False
     bodies_seen.add(path)
     t = doc.text
     n = t.count('\n')
     lines = doc.lines
-    out = ['   --- 본문: %s (%d 줄)' % (disp(path), n)]
+    out = [_t('body', disp(path), n)]
     if n <= BODY_FULL_LINES and len(t) <= BODY_FULL_CHARS:
         out += ['   | ' + l for l in lines]
         return out, True
@@ -1115,17 +1156,17 @@ def body_lines(path, bodies_seen, terms):
             continue
         out.append('   | %d: %s' % (i + 1, _clip_match(lines[i], a, b)))
         shown += 1
-    out.append('   | … (이하 생략 - 전문은 위 경로)')
+    out.append(_t('cut'))
     return out, True
 
 
 def _tag(h):
     if h.tier == 1:
-        return '(별칭: %s) ' % h.label
+        return _t('alias', h.label)
     if h.tier == 2:
-        return '(정규화 일치) '
+        return _t('norm')
     if h.tier == 3:
-        return '(단어 일치: %s) ' % ' + '.join(h.label)
+        return _t('words', ' + '.join(h.label))
     return ''
 
 
@@ -1191,7 +1232,7 @@ def render_name(ctx, name, bodies_seen):
     slots = BODY_TOP
     opened = set()
     for h in shown:
-        lines.append('히트: %s:%d' % (disp(h.ix.path), h.no))
+        lines.append(_t('hit', disp(h.ix.path), h.no))
         lines.append('   ' + _tag(h) + clip_line(h.line, h.s, h.e))
         if h.body is None:
             continue
@@ -1214,24 +1255,24 @@ def render_name(ctx, name, bodies_seen):
     for h in extra:
         if h.body is not None:
             hitfiles.append(h.body)
-            lines.append('추가 히트: %s:%d [%s]' % (h.ix.rel, h.no, h.slug))
+            lines.append(_t('more_hit_slug', h.ix.rel, h.no, h.slug))
         else:
-            lines.append('추가 히트: %s:%d' % (h.ix.rel, h.no))
+            lines.append(_t('more_hit', h.ix.rel, h.no))
     if rest > 0:
-        lines.append('그 외 히트 %d건 (표시 생략)' % rest)
+        lines.append(_t('rest', rest))
 
     if ments:
-        parts = ['%s (%d곳)' % (ctx.rel(p), cnt) for p, cnt, _ in ments[:MENTION_TOP]]
+        parts = [_t('place', ctx.rel(p), cnt) for p, cnt, _ in ments[:MENTION_TOP]]
         more = ''
         if len(ments) > MENTION_TOP:
-            more = ' 외 %d개' % (len(ments) - MENTION_TOP)
-        lines.append('본문 언급(인덱스 밖, 노트북 기준): %s%s' % (', '.join(parts), more))
+            more = _t('others', len(ments) - MENTION_TOP)
+        lines.append(_t('mention', ', '.join(parts), more))
         candidates.extend(p for p, _, _ in ments[:MENTION_TOP])
     for p, cnt, win in cands:
-        lines.append('본문 후보(인덱스 밖): %s (%d곳) - …%s…' % (disp(p), cnt, win))
+        lines.append(_t('cand', disp(p), cnt, win))
         candidates.append(p)
     if cand_more:
-        lines.append('본문 후보 그 외 %d개 파일' % cand_more)
+        lines.append(_t('cand_more', cand_more))
     for sc, got, h in fz:
         linked_body = h.body is not None and not ctx.is_index_like(h.body)
         if FUZZY_COMPACT:
@@ -1241,9 +1282,9 @@ def render_name(ctx, name, bodies_seen):
             where = '%s:%d' % (disp(h.ix.path), h.no)
             if linked_body:
                 where = disp(h.body)
-            lines.append('연관 후보(단어 일부 %s): %s - …%s…' % (','.join(got), where, win))
+            lines.append(_t('rel_cand', ','.join(got), where, win))
         else:
-            lines.append('연관 후보(단어 일부 %s): %s:%d' % (','.join(got), disp(h.ix.path), h.no))
+            lines.append(_t('rel_hit', ','.join(got), disp(h.ix.path), h.no))
             lines.append('   ' + clip_line(h.line, h.s, h.e))
         if linked_body:
             candidates.append(h.body)
@@ -1253,7 +1294,7 @@ def render_name(ctx, name, bodies_seen):
             title = doc.lines[0]
         if len(title) > 120:
             title = title[:120] + '…'
-        lines.append('연관 본문(단어 일부 %s): %s - %s' % (','.join(got), disp(p), title))
+        lines.append(_t('rel_body', ','.join(got), disp(p), title))
         candidates.append(p)
 
     top = None
@@ -1283,7 +1324,7 @@ def assemble(names, res, lognos, log_line):
     out = []
     for name, (lines, files, per), ln in zip(names, res, lognos):
         out.extend(lines)
-        out.append('대조: "%s" → 히트 %d (log #%s)' % (clean_name(name), per['hits'], ln))
+        out.append(_t('check', clean_name(name), per['hits'], ln))
         out.append('')
     out.append(log_line)
     return '\n'.join(out) + '\n'
@@ -1297,7 +1338,7 @@ def run(nb_root, slug, stack, names, bodies_seen):
     """
     ctx = Ctx(os.path.abspath(nb_root), slug, stack)
     res = build(ctx, names, bodies_seen)
-    text = assemble(names, res, [0] * len(names), '기록: (bench)')
+    text = assemble(names, res, [0] * len(names), _t('log', '(bench)'))
     return text, [r[2] for r in res]
 
 
@@ -1398,7 +1439,7 @@ def main(argv):
         except (IOError, OSError) as e:
             sys.stderr.write('nbsearch: 본문 중복 억제 목록을 쓸 수 없다(%s) - 대조 기록과 출력은 그대로\n' % e)
     text = assemble(names, res, lognos,
-                    '기록: %s' % disp(opts['log']))
+                    _t('log', disp(opts['log'])))
     try:
         sys.stdout.write(text)
         sys.stdout.flush()

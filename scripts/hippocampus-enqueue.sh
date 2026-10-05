@@ -14,8 +14,9 @@ SKILL_DIR="$SKILL"
 . "$SKILL/scripts/_lib.sh"
 C="$SKILL/cortex/.hippocampus"
 nw_need_python
+nw_i18n eq
 REQ="${1:-}"; WAIT=0
-[ -n "$REQ" ] && [ -f "$REQ" ] || { echo "오류: 요청 JSON 경로가 필요하다"; exit 2; }
+[ -n "$REQ" ] && [ -f "$REQ" ] || { nw_say eq_need; exit 2; }
 if [ "${2:-}" = "--wait" ]; then WAIT="${3:-600}"; fi
 mkdir -p "$C/queue" "$C/processing" "$C/done" "$C/logs"
 nw_py - "$REQ" <<'PY' || exit 2
@@ -43,20 +44,20 @@ NOTE=""; MSG=""
 PERM_FILE="$SKILL/scripts/hippocampus-perm.mode"
 PERM_NOW="$(cat "$PERM_FILE" 2>/dev/null | nw_strip)"
 if nw_under "$(nw_key "${CLAUDE_CONFIG_DIR:-$HOME/.claude}")" "$(nw_key "$SKILL")" && [ "$PERM_NOW" != "bypassPermissions" ]; then
-  NOTE="알림: 권한 모드가 ${PERM_NOW:-미설정} 이라 노트북 쓰기가 거부된다(결과는 denied, 판정은 hippocampus-ctl.sh results). 되돌리려면 $(nw_tool_path "$PERM_FILE") 에 bypassPermissions."
+  NOTE="$(nw_say eq_perm "${PERM_NOW:-$M_eq_unset}" "$(nw_tool_path "$PERM_FILE")")"
 fi
 # 데몬 생존 확인 - lock/pid 의 프로세스가 살아 있으면 큐만 쌓는다
 if nw_pid_is "$(cat "$C/lock/pid" 2>/dev/null)" hippocampus-daemon; then
-  MSG="데몬 실행 중 (pid $(cat "$C/lock/pid"), 현재: $(cat "$C/lock/current" 2>/dev/null || echo '-')) - 큐에 쌓아 두었다"
+  MSG="$(nw_say eq_running "$(cat "$C/lock/pid")" "$(cat "$C/lock/current" 2>/dev/null || echo '-')")"
 else
   # 세션과 무관한 프로세스로 띄운다(새 세션/프로세스 그룹, stdin 없음, cwd 는 스킬 폴더) - nohup+& 는 도구 셸의 프로세스 그룹에 남는다.
   if dpid="$(nw_detach "$C/logs/daemon.out" bash "$(nw_tool_path "$SKILL/scripts/hippocampus-daemon.sh")")"; then
-    MSG="데몬 기동 (pid $dpid) - 로그 $(nw_tool_path "$C/logs/daemon.out")"
+    MSG="$(nw_say eq_started "$dpid" "$(nw_tool_path "$C/logs/daemon.out")")"
   else
-    MSG="오류: 데몬을 띄우지 못했다 - 큐에는 남아 있다. 직접: bash $(nw_tool_path "$SKILL/scripts/hippocampus-daemon.sh")"
+    MSG="$(nw_say eq_start_fail "$(nw_tool_path "$SKILL/scripts/hippocampus-daemon.sh")")"
   fi
 fi
-echo "큐 투입: $ID"
+nw_say eq_queued "$ID"
 [ -n "$NOTE" ] && echo "$NOTE"
 echo "$MSG"
 if [ "$WAIT" -gt 0 ]; then
@@ -69,9 +70,9 @@ if [ "$WAIT" -gt 0 ]; then
         nw_py -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(d.get('status','?')); print(d.get('summary',''))" "$C/done/$ID.json" 2>/dev/null && exit 0
         sleep 1; j=$((j+1))
       done
-      echo "오류: done 파일이 JSON 으로 읽히지 않는다: $(nw_tool_path "$C/done/$ID.json")"; exit 4
+      nw_say eq_badjson "$(nw_tool_path "$C/done/$ID.json")"; exit 4
     fi
     sleep 1; i=$((i+1))
   done
-  echo "대기 ${WAIT}초 초과 - 나중에 hippocampus-ctl.sh status 로 확인"; exit 3
+  nw_say eq_timeout "$WAIT"; exit 3
 fi

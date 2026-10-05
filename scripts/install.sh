@@ -39,9 +39,14 @@ mkdir -p "$BRAIN/.active" "$BRAIN/cortex/.hippocampus/logs"
 # 설치 선택을 남긴다 - /claude-brain-update 가 install.sh 를 다시 돌릴 때 같은 선택(--no-sleep)을 쓴다
 if [ "$MODE" = install ]; then if [ "$SLEEP" = 0 ]; then echo "--no-sleep" > "$BRAIN/.active/install-opts"; else rm -f "$BRAIN/.active/install-opts"; fi; fi
 
-# 0. 기억 저장소 - 저장소의 seed/cortex 골격 중 없는 파일만 채운다. cortex/ 는 git 이 추적하지 않는다(사용자 기억이 자라는 곳)
+# 0. 기억 저장소 - 골격 중 없는 파일만 채운다. cortex/ 는 git 이 추적하지 않는다(사용자 기억이 자라는 곳)
+#    골격은 언어별이다: ko 는 seed/cortex, 그 밖은 seed/i18n/<언어>/cortex (없으면 영어) - 해마가 새 골격을 만들 때 이 파일들을 본뜬다
 if [ "$MODE" = install ]; then
-  nw_py - "$BRAIN/seed/cortex" "$BRAIN/cortex" <<'PY' && nw_say in_seed "$(nw_tool_path "$BRAIN/cortex")"
+  SEED_LANG="$(nw_py "$BRAIN/scripts/lang.py" get)"; SEED="$BRAIN/seed/cortex"
+  if [ "$SEED_LANG" != ko ]; then
+    for c in "$BRAIN/seed/i18n/$SEED_LANG/cortex" "$BRAIN/seed/i18n/en/cortex"; do [ -f "$c/registry.md" ] && { SEED="$c"; break; }; done
+  fi
+  nw_py - "$SEED" "$BRAIN/cortex" <<'PY' && nw_say in_seed "$(nw_tool_path "$BRAIN/cortex")"
 import os, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
 if not os.path.isfile(os.path.join(src, 'registry.md')):
@@ -56,7 +61,7 @@ for root, dirs, files in os.walk(src):
         if not os.path.exists(t):
             shutil.copyfile(os.path.join(root, f), t)
 PY
-  [ -f "$BRAIN/cortex/registry.md" ] || { nw_say in_seed_fail "$(nw_tool_path "$BRAIN/seed/cortex")"; exit 1; }
+  [ -f "$BRAIN/cortex/registry.md" ] || { nw_say in_seed_fail "$(nw_tool_path "$SEED")"; exit 1; }
 fi
 # backup <파일>: 고치기 전 사본. 가장 최근 사본과 같으면 새로 만들지 않는다(여러 번 돌려도 사본이 쌓이지 않게)
 backup() {

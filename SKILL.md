@@ -1,9 +1,10 @@
 ---
 name: brain
 description: >
-  장기 기억 제어판. 사용자가 /brain 으로 부를 때만 쓴다. 기억 자체는 호출 없이 늘 돈다 - thalamus 훅이 지금 다루는
-  파일, 명령, 에러에 걸린 기억을 떠올리고, hippocampus 가 대화록을 되짚어 새기고, 밤마다 잠이 정리와 망각을 한다.
-  이 스킬은 상태 보기, 기억 찾기, 직접 새기기, 지금 잠들기를 한다. 명령마다 /claude-brain-<명령> 단축 명령이 따로 있다.
+  Long-term memory control panel for Claude Code. Use only when the user calls /brain. Memory itself runs without being
+  called: the thalamus hook recalls memories that match the file, command or error at hand, the hippocampus reviews
+  transcripts and records new memories, and a nightly sleep tidies and forgets. This skill shows status, looks up
+  memories, records something directly, and runs sleep now. Each command also has a /claude-brain-<command> shortcut.
 disable-model-invocation: true
 ---
 
