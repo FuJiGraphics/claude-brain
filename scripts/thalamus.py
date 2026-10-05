@@ -67,10 +67,31 @@ GENERIC_IDS = frozenset('fileID guid PrefabInstance MonoBehaviour RectTransform 
                         'Debug.Log Debug.LogError Debug.LogWarning UnityEngine UnityEditor System.IO NullReferenceException '
                         'MissingReferenceException ArgumentException InvalidOperationException'.split())
 # 명령이 다루는 파일 - Unity 자산과 흔한 언어의 소스, 설정 파일. 문서(.md)는 너무 흔해 뺀다
-FILE_TOKEN_RE = re.compile(r'[\w@+.-]+\.(?:cs|prefab|asset|unity|mat|shader|anim|controller|uss|uxml|asmdef|json|ojn|ojm|py|sh|mjs|cjs|js|ts|tsx|jsx'
-                           r'|vue|svelte|go|rs|java|kt|kts|swift|c|cc|cpp|h|hpp|m|mm|rb|php|dart|scala|lua|sql|gradle|toml|ya?ml)\b')
+CODE_EXT = (r'(?:cs|prefab|asset|unity|mat|shader|anim|controller|uss|uxml|asmdef|json|ojn|ojm|py|sh|mjs|cjs|js|ts|tsx|jsx'
+            r'|vue|svelte|go|rs|java|kt|kts|swift|c|cc|cpp|h|hpp|m|mm|rb|php|dart|scala|lua|sql|gradle|toml|ya?ml)')
+FILE_TOKEN_RE = re.compile(r'[\w@+.-]+\.' + CODE_EXT + r'\b')
+CODE_FILE_RE = re.compile(r'\.' + CODE_EXT + r'$', re.I)
 HEREDOC_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?[^\n]*\n.*?\n\s*\1\s*(?:\n|$)", re.S)
 API_RE = re.compile(r'\b([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)+)\s*[(<]')
+# 소문자로 시작하는 받는 쪽의 호출(stripe.paymentIntents.create(, self.charge_card() - JS, TS, Python 의 흔한 꼴. 쓰는 것은 낱말이 둘 이상인 부분뿐
+# 받는 쪽 없이 부르는 소문자 시작 함수(chargeCard(, charge_card() 도 같다. C# 의 대문자 시작 호출은 API_RE 만 본다(전과 같다)
+CALL_RE = re.compile(r'(?<![\w.$])([a-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(')
+# 어느 코드에나 나오는 내장 호출 - 단서가 못 된다
+COMMON_CALLS = frozenset('setTimeout setInterval clearTimeout clearInterval requestAnimationFrame parseInt parseFloat toString '
+                         'toFixed forEach indexOf lastIndexOf startsWith endsWith toLowerCase toUpperCase addEventListener '
+                         'removeEventListener querySelector querySelectorAll getElementById getAttribute setAttribute '
+                         'preventDefault stopPropagation appendChild removeChild createElement useState useEffect useMemo '
+                         'useCallback useRef useContext hasOwnProperty isArray fromEntries getItem setItem removeItem '
+                         'readFileSync writeFileSync existsSync mkdirSync join_path __init__ __name__ __main__'.split())
+# 너무 흔한 파일 이름 - 소문자 한 낱말 이름 가운데 어느 프로젝트에나 있는 것. 이 밖의 한 낱말(charge, billing)은 기억 파일 이름이나 제목에 있을 때만 쓴다
+GENERIC_STEMS = frozenset('index main app utils util helpers helper types type config configs constants const common models model '
+                          'routes route router server client test tests spec setup init base core lib api views view controller '
+                          'controllers service services store schema schemas styles style layout page component components hooks '
+                          'context provider handler handlers middleware database settings urls admin apps forms serializers tasks '
+                          'signals manage wsgi asgi conftest package readme license makefile dockerfile global globals logger errors '
+                          'error mock mocks fixtures data default loading template templates script scripts module modules plugin '
+                          'plugins options props state actions reducer reducers selectors slice slices entry bootstrap vite webpack '
+                          'babel eslint jest tsconfig next nuxt'.split())
 CS_ERR_RE = re.compile(r'([\w.-]+)\.cs\(\d+,\d+\): *(?:error|warning) (CS\d{4}): *([^\n]*)')
 FRAME_RE = re.compile(r'\(at (?:[\w./-]*/)?([\w-]+)\.cs:\d+\)|in [^\n]*?/([\w-]+)\.cs:\d+')
 EXC_RE = re.compile(r'\b([A-Z][A-Za-z0-9_]*(?:Exception|Error))\b')
@@ -142,18 +163,25 @@ def plain_word(x):
 
 
 def path_cues(path):
-    """[파일 경로의 단서]
-    - 파일 이름 줄기 하나. 흔한 낱말, 대문자 문서 이름(README, CLAUDE)은 뺀다
+    """[파일 경로의 단서] [(단서, 세기)]
+    - 파일 이름 줄기 하나. 대문자 문서 이름(README, CLAUDE)과 짧은 이름은 뺀다
+    - 소문자 한 낱말(charge.ts, billing.py)은 'plain' - JS, TS, Python 은 파일 이름이 대개 이 꼴이라 빼 버리면 파일로 떠올리는 길이 막힌다.
+      영어 낱말이라 우연히 겹치기 쉬워(render.ts 와 frame-render) 소스, 설정 파일만, index, utils 같은 흔한 이름은 빼고, Mem.by_id 에서 더 좁힌다
+    - 그때 확장자까지 붙은 이름(charge.ts)도 'file' 로 - 인덱스 줄 머리에 파일 이름을 그대로 적은 기억은 그 파일에 관한 것이다.
+      제목이 한국어, 일본어, 중국어인 뇌에서는 제목에 영어 낱말이 없어 'plain' 만으로는 거의 안 걸린다
     """
     if not path:
         return []
-    stem = os.path.basename(path.rstrip('/'))
-    if stem.endswith('.meta'):
-        stem = stem[:-5]
-    stem = os.path.splitext(stem)[0]
-    if len(stem) < 4 or plain_word(stem) or stem.isupper():
+    name = os.path.basename(path.rstrip('/'))
+    if name.endswith('.meta'):
+        name = name[:-5]
+    stem = os.path.splitext(name)[0]
+    if len(stem) < 4 or stem.isupper():
         return []
-    return [stem]
+    if plain_word(stem):
+        ok = CODE_FILE_RE.search(name) and stem not in GENERIC_STEMS and stem not in GENERIC_IDS
+        return [(stem, 'plain'), (name, 'file')] if ok else []
+    return [(stem, 'head')]
 
 
 def bash_cues(cmd, exclude=()):
@@ -164,12 +192,13 @@ def bash_cues(cmd, exclude=()):
     out = []
     for m in FILE_TOKEN_RE.finditer(HEREDOC_RE.sub('\n', cmd)):
         stem = os.path.splitext(os.path.basename(m.group(0)))[0]
+        # 소문자 한 낱말(check.sh, capture.py)은 쓰지 않는다 - 조사, 검증 스크립트 이름이라 실제 세션 재생에서 엉뚱한 기억을 끌어오고 맞던 것을 밀어냈다
         if len(stem) >= 4 and not plain_word(stem) and stem not in exclude and all(stem != x for x, _ in out):
             out.append((stem, 'head'))
     return out[:10]
 
 
-def api_cues(new, old='', exclude=()):
+def api_cues(new, old='', exclude=(), calls=True):
     """[편집 내용, 명령문 속 코드의 단서]
     - 새로 부르는 점 표기 API(AssetDatabase.SaveAssets, UniTask.Yield)와 그 메서드 이름(SaveAssets). 원래 있던 호출은 뺀다
     - 세기 'api': 줄 머리 일치까지 인정하고, 여러 기억이 그 API 를 말하면 가장 들어맞는 하나만 고른다(부르려는 API 는 의도가 분명한 단서다)
@@ -191,6 +220,21 @@ def api_cues(new, old='', exclude=()):
             add(meth)
         if len(out) >= 8:
             break
+    # 소문자로 시작하는 호출(JS, TS, Python): 낱말이 둘 이상인 이름(paymentIntents, chargeCard, charge_card)만 - create, get, log 같은 한 낱말은 어디에나 있다.
+    # 편집에만 쓴다 - 명령의 heredoc 속 조사 코드는 의도가 아니다(명령문 속 낱말은 판정 방해 64%)
+    had2 = set(CALL_RE.findall(old or '')) if calls else ()
+    for m in (CALL_RE.finditer(new or '') if calls else ()):
+        if len(out) >= 8:
+            break
+        if m.group(1) in had2:
+            continue
+        parts = m.group(1).split('.')
+        if any(x[:1].isupper() for x in parts):
+            continue   # 대문자 부분이 낀 사슬(button.onClick.AddListener)은 C# 꼴 - API_RE 만 본다
+        for part in parts[1:] if len(parts) > 1 else parts:
+            p = part.strip('_$')
+            if len(p) >= 6 and p[0].islower() and p not in COMMON_CALLS and (any(ch.isupper() for ch in p[1:]) or '_' in p):
+                add(p)
     return out
 
 
@@ -254,10 +298,12 @@ class Mem(object):
         self.ns = nbsearch
         self.ctx = nbsearch.Ctx(CX, slug, stack)
 
-    def by_id(self, cue, strong_only=False, top1=False):
+    def by_id(self, cue, strong_only=False, top1=False, plain=False):
         """[단서 하나]
         - [(기억 경로, 순위, 점수, 줄)] 순위 0 그대로, 1 별칭, 2 정규화
         - strong_only 면 기억 파일 이름이나 첫 링크 글에 단서가 있을 때만. 흔한 단서는 파일 이름 일치만
+        - plain(소문자 한 낱말 파일 이름과 그 확장자 붙은 이름): 낱말 단위 일치만, 공용 층 기억은 빼고 프로젝트, 스택 기억만.
+          진짜 사용자 뇌 5개 프로젝트에서 공용 층 일치는 거의 우연이었다(protocol.ts -> collaboration-protocol 같은 것)
         """
         hits = [h for h in self.ns.find_hits(self.ctx, cue) if h.tier <= 2 and h.body is not None
                 and not self.ctx.is_index_like(h.body) and os.path.isfile(h.body)]
@@ -273,6 +319,8 @@ class Mem(object):
             lk = self.ns.first_link(line)
             in_title = lk is not None and ((lk[0] >= 0 and lk[0] <= s < lk[1]) or lk[2] <= s < lk[3])
             if not (slug_hit or in_title or (s < HEAD_CHARS and not strong_only)):
+                continue
+            if plain and (not (wb or slug_hit) or self.ctx.rel(h.body).startswith('common/')):
                 continue
             if len(cue) < SHORT_ID and not (wb or slug_hit):
                 continue
@@ -333,11 +381,11 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
     """
     exclude = set(x for x in (root or '').split('/') if x)
     if kind in ('read', 'edit'):
-        cues = [(c, 'head') for c in path_cues(path) if c not in exclude]
+        cues = [(c, st) for c, st in path_cues(path) if c not in exclude]
         if kind == 'edit' and new:
             cues += api_cues(new, old, exclude)
     elif kind == 'bash':
-        cues = bash_cues(text, exclude) + api_cues(text, '', exclude)
+        cues = bash_cues(text, exclude) + api_cues(text, '', exclude, calls=False)
     elif kind == 'error':
         cues = error_cues(text, exclude)
     else:
@@ -347,7 +395,7 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
     mem = Mem(slug, stack)
     cand = {}
     for c, st in cues:
-        for body, tier, sc, line in mem.by_id(c, st == 'strong', st == 'api'):
+        for body, tier, sc, line in mem.by_id(c, st in ('strong', 'plain'), st == 'api', st in ('plain', 'file')):
             key = (tier, -sc)
             if body not in cand or key < cand[body][0]:
                 cand[body] = (key, line, c)
@@ -478,7 +526,7 @@ def _map(rel, limit, drop_cards=False):
     body = '\n'.join(out)
     if len(body) > limit:
         cut = body.rfind('\n', 0, limit)
-        body = body[:cut if cut > limit // 2 else limit] + '\n(… 전문: %s)' % rel
+        body = body[:cut if cut > limit // 2 else limit] + '\n' + L.t('full') % rel
     return body
 
 
