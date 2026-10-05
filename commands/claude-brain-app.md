@@ -1,5 +1,6 @@
 ---
-description: brain 앱 열기 - 프로젝트별 뇌 구경, 물어보기, 먹이, 최적화, 성격
+description: {{DESC}}
+argument-hint: "{{HINT}}"
 disable-model-invocation: true
 ---
 <!-- brain:command - brain 의 install.sh 가 commands/ 템플릿으로 만든 파일이다. 고치려면 저장소의 템플릿을 고치고 install.sh 를 다시 돌린다 -->

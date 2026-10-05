@@ -1,6 +1,6 @@
 ---
-description: 기억시키기 - 해마 큐에 넣고 바로 끝난다
-argument-hint: "<내용>"
+description: {{DESC}}
+argument-hint: "{{HINT}}"
 disable-model-invocation: true
 ---
 <!-- brain:command - brain 의 install.sh 가 commands/ 템플릿으로 만든 파일이다. 고치려면 저장소의 템플릿을 고치고 install.sh 를 다시 돌린다 -->

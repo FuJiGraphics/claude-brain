@@ -26,11 +26,31 @@ nw_find_python() {
   done
   return 1
 }
+# python 이 없으면 cli_i18n.py 를 못 읽으므로 이 한 줄만 셸에서 언어를 고른다
+nw_nopy_msg() {
+  case "$(sed -n 's/^lang=//p' "${SKILL_DIR:-.}/.active/config" 2>/dev/null | tail -1)" in
+    en) echo "Error: brain needs Python 3.7 or later (none of python3, python, py runs)" ;;
+    ja) echo "エラー: brain には Python 3.7 以上が必要です(python3、python、py のどれも実行できません)" ;;
+    zh) echo "错误: brain 需要 Python 3.7 或更高版本(python3、python、py 都无法运行)" ;;
+    *) echo "오류: brain 은 Python 3.7 이상이 필요해요 (python3, python, py 중 실행되는 것이 없어요)" ;;
+  esac
+}
 nw_py() {
-  [ -n "$NW_PY" ] || nw_find_python || { echo "오류: python 3.7 이상이 없다 (python3, python, py 중 실행되는 것이 없음)" >&2; return 127; }
+  [ -n "$NW_PY" ] || nw_find_python || { nw_nopy_msg >&2; return 127; }
   if [ "$NW_PY" = py ]; then py -3 "$@"; else "$NW_PY" "$@"; fi
 }
-nw_need_python() { [ -n "$NW_PY" ] || nw_find_python || { echo "오류: python 3.7 이상이 필요하다 (python3, python, py 중 실행되는 것이 없음)" >&2; exit 2; }; }
+nw_need_python() { [ -n "$NW_PY" ] || nw_find_python || { nw_nopy_msg >&2; exit 2; }; }
+
+# ---- 사람이 읽는 문구 (scripts/cli_i18n.py) ----
+# nw_i18n <묶음>...: 지금 언어의 문구를 M_<키> 변수로 읽는다(python 한 번). 언어를 바꾼 뒤에는 다시 부른다.
+# nw_say <키> [인자]...: 그 문구를 printf 로 한 줄 출력한다. 키는 점 대신 밑줄(cfg_on). 못 읽었으면 키 이름이 나온다.
+nw_i18n() { eval "$(nw_py "$SKILL_DIR/scripts/cli_i18n.py" sh "$@" 2>/dev/null)"; }
+nw_say() {
+  local _k="$1" _v="M_$1" _f; shift
+  _f="${!_v:-}"; [ -n "$_f" ] || _f="$_k"
+  # shellcheck disable=SC2059   # 문구가 형식 문자열이다 (cli_i18n.py 규칙: %s, %d, %% 만)
+  printf "$_f\n" "$@"
+}
 
 # ---- 경로 ----
 # nw_tool_path: 모델의 파일 도구(Node)와 bash 양쪽에서 통하는 표기. Windows 는 C:/Users/... (cygpath -m), 그 외는 그대로.

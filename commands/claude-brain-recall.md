@@ -1,6 +1,6 @@
 ---
-description: 기억 찾기 - 파일, 심볼, API, 에러 문자열, 증상으로
-argument-hint: "<이름>..."
+description: {{DESC}}
+argument-hint: "{{HINT}}"
 disable-model-invocation: true
 ---
 <!-- brain:command - brain 의 install.sh 가 commands/ 템플릿으로 만든 파일이다. 고치려면 저장소의 템플릿을 고치고 install.sh 를 다시 돌린다 -->

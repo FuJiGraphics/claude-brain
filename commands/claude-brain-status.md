@@ -1,5 +1,6 @@
 ---
-description: brain 상태 - 켜짐, 해마 설정과 큐, 실패, 마지막 잠, 최근 떠올림
+description: {{DESC}}
+argument-hint: "{{HINT}}"
 disable-model-invocation: true
 ---
 <!-- brain:command - brain 의 install.sh 가 commands/ 템플릿으로 만든 파일이다. 고치려면 저장소의 템플릿을 고치고 install.sh 를 다시 돌린다 -->

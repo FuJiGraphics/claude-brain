@@ -8,6 +8,7 @@ BRAIN="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$BRAIN"
 . "$BRAIN/scripts/_lib.sh"
 nw_need_python
+nw_i18n ed
 ST="$BRAIN/.active/editor.json"
 OPEN=1; CMD=start
 for a in "$@"; do case "$a" in --no-open) OPEN=0;; stop) CMD=stop;; esac; done
@@ -18,19 +19,31 @@ url() { nw_py -c 'import json,sys; d=json.load(open(sys.argv[1])); print("http:/
 alive() {
   [ -f "$ST" ] && nw_py -c 'import json,sys,urllib.request; d=json.load(open(sys.argv[1])); urllib.request.urlopen("http://127.0.0.1:%d/index.html" % d["port"], timeout=1)' "$STN" >/dev/null 2>&1
 }
+quit_server() {
+  nw_py -c 'import json,sys,urllib.request; d=json.load(open(sys.argv[1])); urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:%d/api/quit" % d["port"], data=b"{}", headers={"X-Brain-Token": d["token"], "Content-Type": "application/json"}), timeout=2)' "$STN" >/dev/null 2>&1
+  local i=0; while alive && [ "$i" -lt 20 ]; do sleep 0.1; i=$((i+1)); done
+  rm -f "$ST"
+}
+# 떠 있는 서버의 코드가 지금 파일과 같은가 - 서버가 남긴 code(가장 늦은 수정 시각)를 같은 방식으로 계산해 비교한다(server.py code_stamp)
+same_code() {
+  nw_py -c 'import glob,json,os,sys
+b=sys.argv[2]; fs=[os.path.join(b,"editor","server.py")]+glob.glob(os.path.join(b,"editor","web","*"))+glob.glob(os.path.join(b,"scripts","*.py"))
+cur=int(max((os.path.getmtime(f) for f in fs if os.path.isfile(f)), default=0))
+sys.exit(0 if json.load(open(sys.argv[1])).get("code") == cur else 1)' "$STN" "$(nw_tool_path "$BRAIN")" 2>/dev/null
+}
 if [ "$CMD" = stop ]; then
-  if alive; then
-    nw_py -c 'import json,sys,urllib.request; d=json.load(open(sys.argv[1])); urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:%d/api/quit" % d["port"], data=b"{}", headers={"X-Brain-Token": d["token"], "Content-Type": "application/json"}), timeout=2)' "$STN" >/dev/null 2>&1
-    rm -f "$ST"; echo "brain 앱을 껐다"
-  else echo "실행 중인 앱 없음"; fi
+  if alive; then quit_server; nw_say ed_off
+  else nw_say ed_none; fi
   exit 0
 fi
+RESTARTED=0
+if alive && ! same_code; then quit_server; RESTARTED=1; fi   # 업데이트 뒤 옛 코드 서버가 남아 있으면 새로 띄운다
 if ! alive; then
   rm -f "$ST"
-  nw_detach "$BRAIN/.active/editor.out" "$NW_PY" "$(nw_tool_path "$BRAIN/editor/server.py")" >/dev/null || { echo "오류: 에디터를 띄우지 못했다 - 직접: python3 $BRAIN/editor/server.py"; exit 1; }
+  nw_detach "$BRAIN/.active/editor.out" "$NW_PY" "$(nw_tool_path "$BRAIN/editor/server.py")" >/dev/null || { nw_say ed_fail "$(nw_tool_path "$BRAIN/editor/server.py")"; exit 1; }
   i=0
   while [ ! -f "$ST" ] && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i+1)); done
-  [ -f "$ST" ] || { echo "오류: 에디터가 3초 안에 뜨지 않았다 - 로그: $BRAIN/.active/editor.out"; exit 1; }
+  [ -f "$ST" ] || { nw_say ed_slow "$(nw_tool_path "$BRAIN/.active/editor.out")"; exit 1; }
 fi
 U="$(url)"
 if [ "$OPEN" = 1 ]; then
@@ -50,5 +63,6 @@ if [ "$OPEN" = 1 ]; then
     [ "$opened" = 0 ] && command -v xdg-open >/dev/null 2>&1 && (xdg-open "$U" >/dev/null 2>&1 &)
   fi
 fi
-echo "brain 앱: $U"
-echo "(이 컴퓨터에서만 열린다. 끄기: bash $(nw_tool_path "$BRAIN/scripts/editor.sh") stop)"
+[ "$RESTARTED" = 1 ] && nw_say ed_restart
+nw_say ed_url "$U"
+nw_say ed_local "$(nw_tool_path "$BRAIN/scripts/editor.sh")"

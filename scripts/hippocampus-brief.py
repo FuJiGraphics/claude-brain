@@ -46,6 +46,6 @@ if __name__ == '__main__':
         import os
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import lang
-        sys.stdout.write(lang.BRIEF % lang.NAMES[lang.current()])
+        sys.stdout.write(lang.brief())
     except Exception:
         pass

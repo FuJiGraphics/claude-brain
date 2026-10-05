@@ -87,9 +87,19 @@ T = {
     },
 }
 
-# 해마 지침 끝에 붙이는 기억 언어 절 (지침 본문은 한국어 하나로 둔다)
+# 해마 지침 끝에 붙이는 언어 절 (지침 본문은 한국어 하나로 둔다). 두 자리 모두 설정 언어 이름이 들어간다
 BRIEF = ('\n## 기억 언어\n\n- 기억 본문과 인덱스 줄은 대화에서 사용자가 쓴 언어로 쓴다. 대화 언어를 가리기 어렵거나 여러 언어가 섞이면 %s 로 쓴다.\n'
-         '- 이미 다른 언어로 쓰인 기억은 번역하지 않는다. 파일 이름(슬러그)은 언어와 상관없이 영어 소문자와 하이픈으로 쓴다.\n')
+         '- 이미 다른 언어로 쓰인 기억은 번역하지 않는다. 파일 이름(슬러그)은 언어와 상관없이 영어 소문자와 하이픈으로 쓴다.\n'
+         '- 본문 머리 표식도 그 언어로 쓴다: 사용자 결정 = User decision = ユーザー決定 = 用户决定, 함정 = pitfall = 落とし穴 = 踩坑 '
+         '(forget.py 가 네 언어의 표식을 모두 알아보고 120일 동안 남긴다).\n'
+         '- 결과 요약(done 파일의 summary)은 사용자가 앱 일지와 /claude-brain-results 에서 읽는 글이라 %s 로 쓴다. \'돌려줄 것\' 형식의 머리말과 항목 이름도 '
+         '그 언어로 옮기고, 슬러그, 경로, 모드 이름(record 등), 숫자는 그대로 둔다.\n')
+
+
+def brief(lang=None):
+    """[해마 지침의 언어 절] 설정 언어로 채운다"""
+    n = NAMES[lang if lang in LANGS else current()]
+    return BRIEF % (n, n)
 
 
 def current():
@@ -161,7 +171,7 @@ def main():
     elif cmd == 'claude-md':
         print(T[a[1] if len(a) > 1 and a[1] in LANGS else current()]['claude_md'])
     elif cmd == 'brief-line':
-        print(BRIEF % NAMES[a[1] if len(a) > 1 and a[1] in LANGS else current()])
+        print(brief(a[1] if len(a) > 1 else None))
     else:
         print(__doc__)
         return 2
