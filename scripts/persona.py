@@ -111,6 +111,11 @@ GATES = {
     ('autonomy', 'ambiguous'): ('deny_ask', '선택지 질문 도구를 막고 기본값으로 진행시킴'),
 }
 
+# 가벼운 관문 - 강도 2 에 거는 것. 사용자에게 묻지 않고 모델만 한 번 되돌려 보낸다(글로만 알리면 놓친다 - 2026-10-05 부엉이 세션이 계획 없이 고치기 시작)
+SOFT_GATES = {
+    ('careful', 'normal'): ('plan_first', '요청마다 첫 코드 수정 전에 계획을 보이도록 한 번 되돌려 보냄'),
+}
+
 # 조합 문장 - 같은 상황에 둘 다 있으면 붙는다(축이 다른 성향끼리)
 COMBOS = [
     (('drive', 'curious'), '궁금한 점은 묻되 답을 기다리며 멈추지 않는다 - 기본값으로 진행하고 질문과 가정을 결과 끝에 적는다'),
@@ -133,7 +138,12 @@ RISKY_RE = re.compile(
     r'\bgit\s+clean\s+-[a-zA-Z]*f|\bgit\s+(checkout|restore)\s+(--\s+)?\.(\s|$)|\bgit\s+branch\s+-D|\bgit\s+rebase\b|'
     r'\bgit\s+filter-(branch|repo)|\bgit\s+stash\s+(drop|clear)|\bdrop\s+(table|database|schema)\b|\btruncate\s+table\b|'
     r'\bdelete\s+from\b|\bnpm\s+publish|\bvsce\s+publish|\bdocker\s+(system\s+prune|rm|rmi)\b|\bkubectl\s+delete|'
-    r'\bterraform\s+(apply|destroy)|\bmkfs|\bdd\s+if=|>\s*/dev/sd|\bchmod\s+-R|\bchown\s+-R|\bfind\b[^\n]*-delete)',
+    r'\bterraform\s+(apply|destroy)|\bmkfs|\bdd\s+if=|>\s*/dev/sd|\bchmod\s+-R|\bchown\s+-R|\bfind\b[^\n]*-delete|'
+    # 코드로 하는 폴더 통째 삭제(언어 무관) - 파일 하나 지우기(os.remove, unlink, File.Delete)는 임시 파일 정리에 흔해 넣지 않는다
+    r'\bshutil\.rmtree\b|\bos\.removedirs\b|\brimraf\b|\b(fs|fsp|promises)\.rm(Sync)?\s*\([^)\n]*recursive|'
+    r'\bDirectory\.Delete\s*\(|\bFileUtils\.(rm_rf|rm_r|remove_dir|remove_entry)\b|\bos\.RemoveAll\b|\bremove_dir_all\b|'
+    # 엔진, 도구의 자산 삭제 API - 그 도구를 쓰는 사람에게만 걸린다(Unity 의 AssetDatabase 는 셸 rm 없이 지운다)
+    r'\bAssetDatabase\.(DeleteAssets?|MoveAssetsToTrash|MoveAssetToTrash)\b|\bFileUtil\.DeleteFileOrDirectory\b)',
     re.I)
 
 # 품종(프리셋) - 다마고치처럼 고르는 시작점. 그래프는 이것으로 만든다
@@ -324,7 +334,7 @@ def combo(pair, lang):
 
 def gate_note(key, lang):
     x = _tx(lang)
-    return (x and x['gates'].get(key)) or next(v[1] for v in GATES.values() if v[0] == key)
+    return (x and x['gates'].get(key)) or next(v[1] for v in list(GATES.values()) + list(SOFT_GATES.values()) if v[0] == key)
 
 
 def breed_text(k, lang):
@@ -386,6 +396,11 @@ def compile_graph(graph, lang=None):
                 why = ui(lang, 'w_down_nodetect') if SITUATIONS[s]['detect'] is None else ui(lang, 'w_down_nogate')
                 warnings.append(ui(lang, 'w_down') % (sit(s, lang)[0], trait(t, lang)['name'], why))
             else:
+                gates[gk[0]] = gate_note(gk[0], lang)
+    for s_, tr in by_sit.items():   # 강도 2 의 가벼운 관문(강도 3 이면 위의 무거운 관문이 대신한다)
+        for t, lv in tr.items():
+            gk = SOFT_GATES.get((t, s_))
+            if gk and lv == 2:
                 gates[gk[0]] = gate_note(gk[0], lang)
     if 'first_edit_ask' in gates and 'big_change_ask' in gates:
         del gates['big_change_ask']   # 첫 수정마다 묻는다면 큰 변경 확인은 겹친다

@@ -777,6 +777,7 @@ def persona_of(slug):
 def gate(d, sid, agent):
     """[성격 관문 - PreToolUse]
     - 위험 명령(risky_ask), 요청의 첫 수정(first_edit_ask), 큰 변경(big_change_ask)은 사용자 확인(ask), 자율 3(deny_ask)은 질문 도구를 막는다
+    - 신중 2(plan_first)는 요청의 첫 코드 수정을 한 번 막고(deny) 계획을 먼저 보이게 한다 - 사용자에게는 묻지 않는다
     - 코드 수정과 검증 명령을 세션 상태(pt)에 적는다 - Stop 검증 검사(verify_block)가 읽는다. 서브에이전트의 수정,검증도 메인 상태에 센다
     """
     sc = scope(d.get('cwd') or '')
@@ -808,6 +809,12 @@ def gate(d, sid, agent):
         return
     st = load_state(mp)
     pt = st.setdefault('pt', {})
+    if g.get('plan_first') and not agent and not pt.get('planned'):
+        # 신중 2: 요청의 첫 코드 수정을 한 번 되돌려 계획을 먼저 보이게 한다. 수정은 일어나지 않았으니 파일, 검증 상태에는 세지 않는다
+        pt['planned'] = True
+        save_state(mp, st)
+        _GATE.update(permissionDecision='deny', permissionDecisionReason=L.t('gate_plan'))
+        return
     files = pt.setdefault('files', [])
     if p not in files:
         files.append(p)

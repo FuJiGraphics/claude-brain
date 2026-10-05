@@ -56,7 +56,7 @@ TEXT = {
         },
         'gates': {
             'risky_ask': 'asks the user before hard-to-undo commands', 'big_change_ask': 'asks the user when more files than the limit change',
-            'first_edit_ask': 'asks the user before the first file edit of each request', 'verify_stop': 'sends it back once if it tries to finish without verifying edits',
+            'first_edit_ask': 'asks the user before the first file edit of each request', 'plan_first': 'sends it back once before the first code edit of each request so it shows a plan', 'verify_stop': 'sends it back once if it tries to finish without verifying edits',
             'deny_ask': 'blocks the multiple-choice question tool and makes it go with defaults',
         },
         'breeds': {
@@ -126,7 +126,7 @@ TEXT = {
         },
         'gates': {
             'risky_ask': '元に戻しにくいコマンドの前でユーザーに確認', 'big_change_ask': '基準より多くのファイルを変えたらユーザーに確認',
-            'first_edit_ask': '依頼ごとの最初のファイル変更の前でユーザーに確認', 'verify_stop': '変更後に検証せず終えようとしたら一度差し戻す',
+            'first_edit_ask': '依頼ごとの最初のファイル変更の前でユーザーに確認', 'plan_first': '依頼ごとの最初のコード変更の前に一度差し戻し、計画を示させる', 'verify_stop': '変更後に検証せず終えようとしたら一度差し戻す',
             'deny_ask': '選択肢の質問ツールを止め、既定値で進めさせる',
         },
         'breeds': {
@@ -189,7 +189,7 @@ TEXT = {
         },
         'gates': {
             'risky_ask': '难以撤销的命令前向用户确认', 'big_change_ask': '修改文件数超过上限时向用户确认',
-            'first_edit_ask': '每次请求第一次修改文件前向用户确认', 'verify_stop': '修改后未验证就想结束时退回一次',
+            'first_edit_ask': '每次请求第一次修改文件前向用户确认', 'plan_first': '每次请求第一次修改代码前退回一次,让它先给出计划', 'verify_stop': '修改后未验证就想结束时退回一次',
             'deny_ask': '阻止选择题提问工具,让它用默认值继续',
         },
         'breeds': {
