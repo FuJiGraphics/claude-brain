@@ -9,12 +9,16 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const phone = $('#phone');
 const screen = $('#screen');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// 답 글의 `코드` 를 <code> 로 - 이스케이프한 뒤 바꾼다
+const inlineCode = (s) => esc(s).replace(/`([^`\n]{1,120})`/g, '<code>$1</code>').replace(/\*\*([^*\n]{1,120})\*\*/g, '<b>$1</b>');
 
 // ---------------------------------------------------------------- 언어
 const LANGS = ['ko', 'en', 'ja', 'zh'];
 const LOCALE = { ko: 'ko', en: 'en', ja: 'ja', zh: 'zh-CN' };
 let LANG = 'ko';
-const fill = (s, v, escape) => String(s).replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? (escape ? esc(v[k]) : String(v[k])) : m));
+// {n|memory|memories} - 값이 1 이면 앞 낱말, 아니면 뒤 낱말(영어 단복수). 다른 언어는 쓰지 않는다
+const plural = (s, v) => String(s).replace(/\{(\w+)\|([^|{}]*)\|([^|{}]*)\}/g, (m, k, one, many) => (v && k in v ? (Number(String(v[k]).replace(/[^0-9.-]/g, '')) === 1 ? one : many) : m));
+const fill = (s, v, escape) => plural(s, v).replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? (escape ? esc(v[k]) : String(v[k])) : m));
 const raw = (k) => { const d = I18N[LANG] || I18N.ko; return k in d ? d[k] : (k in I18N.ko ? I18N.ko[k] : k); };
 const t = (k, v) => fill(raw(k), v, true);     // HTML 자리 - 값은 이스케이프한다
 const tp = (k, v) => fill(raw(k), v, false);   // 글자 자리(textContent, 알림, 제목)
@@ -60,6 +64,7 @@ async function api(path, body) {
   let r;
   try { r = await fetch(path, opt); } catch (e) { throw new Error(tp('err.conn')); }
   const j = await r.json().catch(() => ({ error: tp('err.read') }));
+  if (r.status === 401) throw new Error(tp('err.token'));
   if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
 }
@@ -379,6 +384,7 @@ function careItems(ov) {
   if (ov.config.enabled && (!ls || Date.now() / 1000 - ls > 36 * 3600)) {
     out.push({ e: '🌙', bg: 'var(--lav-l)', t: tp(ls ? 'care.sleepy' : 'care.nosleep'), d: tp('care.sleep.d'), go: tp('care.sleep'), act: 'sleep' });
   }
+  if (ov.config.update) out.unshift({ e: '🎁', bg: 'var(--mint-l)', t: tp('care.update'), d: tp('care.update.d', { n: ov.config.update.n, s: ov.config.update.subject }), go: tp('care.update.go'), act: 'update' });
   if (ov.projects.length && !ov.projects.some((p) => p.persona)) {
     const big = ov.projects.slice().sort((a, b) => b.count - a.count)[0];
     out.push({ e: '🎭', bg: 'var(--lav-l)', t: tp('care.persona'), d: tp('care.persona.d', { name: big.slug }), go: tp('care.persona.go'), href: `#/p/projects/${encodeURIComponent(big.slug)}?open=persona` });
@@ -390,6 +396,7 @@ async function doCare(act, btn) {
   try {
     if (act === 'sleep') { await api('/api/sleep', {}); toast(tp('toast.sleep')); }
     if (act === 'on') { await api('/api/config', { action: 'on' }); toast(tp('toast.on')); }
+    if (act === 'update') { btn.disabled = false; updateSheet(); return; }
     btn.style.opacity = '.4';
     setTimeout(route, 1200);
   } catch (e) { toast(e.message); btn.disabled = false; }
@@ -402,14 +409,14 @@ async function pageHome(alive) {
   document.title = 'brain';
   const h = ov.hippo;
   const tiles = ov.projects.map((p, i) => {
-    const alert = p.capacity > 1 ? '<span class="alert">💦</span>' : '';
+    const alert = p.muted ? `<span class="alert" data-tip="${esc(t('tile.muted'))}">😴</span>` : p.capacity > 1 ? '<span class="alert">💦</span>' : '';
     const ps = p.persona ? `<span class="ps">${breedIcon(p.persona.breed)}</span>` : '';
     const tip = t('home.tile.tip', { mood: moodName(p.mood), n: num(p.count), w: pct(p.capacity) }) + (p.persona ? '<br>' + t('home.tile.persona', { name: p.persona.name || tp('act.persona.has') }) : '');
-    return `<a class="pet-tile" href="#/p/projects/${encodeURIComponent(p.slug)}" style="--t:${tintOf(p.slug)};animation-delay:${i * 60}ms" data-tip="${esc(tip)}">
+    return `<a class="pet-tile${p.muted ? ' muted' : ''}" href="#/p/projects/${encodeURIComponent(p.slug)}" style="--t:${tintOf(p.slug)};animation-delay:${i * 60}ms" data-tip="${esc(tip)}">
       <span class="lv">Lv.${LV[p.stage.key]} ${esc(stageName(p.stage.key))}</span>${alert || ps}
       ${pet(p.mood.key, p.stage.key)}
       <span class="nm">${esc(p.slug)}</span>
-      <span class="md">${MOOD_EMOJI[p.mood.key] || ''} ${esc(moodName(p.mood))}</span>
+      <span class="md">${p.muted ? esc(tp('tile.muted')) : `${MOOD_EMOJI[p.mood.key] || ''} ${esc(moodName(p.mood))}`}</span>
       <span class="minibar ${barCls(p.capacity)}"><i style="width:${Math.min(100, p.capacity * 100)}%"></i></span>
     </a>`;
   }).join('');
@@ -429,11 +436,61 @@ async function pageHome(alive) {
         <span class="ce" style="background:${c.bg}">${c.e}</span><span><span class="ct">${esc(c.t)}</span><br><span class="cd">${esc(c.d)}</span></span><span class="go">${esc(c.go)} ›</span>
       ${c.href ? '</a>' : '</button>'}`).join('')}</div>` : ''}
     <div class="h2" style="margin-top:4px">${t('home.mine')} <small>${t('home.mine.hint')}</small></div>
-    <div class="pets">${tiles || `<div class="empty" style="grid-column:1/-1"><span class="big">🥚</span>${t('home.none')}<br><span class="hint">${t('home.none.hint')}</span></div>`}</div>
+    <div class="pets">${tiles || `<div class="empty" style="grid-column:1/-1"><span class="big">🥚</span>${t('home.none')}<br><span class="hint" id="noneHint">${t('home.none.hint')}</span></div>`}</div>
+    <div id="newBox"></div>
     <div class="h2">${t('home.shared')} <small>${t('home.shared.hint')}</small></div>
     <div class="shared">${shared}</div>`;
   $$('.care-item[data-act]').forEach((b) => b.addEventListener('click', () => doCare(b.dataset.act, b)));
   updateEyes();
+  loadCandidates(alive, !ov.projects.length);
+}
+
+// 아직 모르는 프로젝트 - 최근 Claude Code 로 일했지만 등록 안 된 git 폴더. '키우기' 로 바로 등록을 맡긴다
+const HATCHING = new Set();
+async function loadCandidates(alive, empty) {
+  let r;
+  try { r = await api('/api/candidates'); } catch (e) { return; }
+  if (!alive() || !$('#newBox')) return;
+  const items = (r.items || []).slice(0, 5);
+  if (!items.length) return;
+  if (empty && $('#noneHint')) $('#noneHint').textContent = tp('home.none.new');
+  $('#newBox').innerHTML = `<div class="h2">${t('home.new')} <small>${t('home.new.hint')}</small></div>
+    <div class="care">${items.map((c, i) => `<button class="care-item cand" data-i="${i}" data-tip="${esc(t('home.new.tip'))}" ${HATCHING.has(c.root) ? 'disabled' : ''}>
+      <span class="ce" style="background:var(--lemon-l)">🥚</span><span style="min-width:0"><span class="ct">${esc(c.name)}</span><br><span class="cd">${esc(tp('home.new.meta', { n: c.sessions, ago: fmtAgo(c.last) }))}</span></span>
+      <span class="go">${HATCHING.has(c.root) ? t('home.new.wait') : t('home.new.go')}</span></button>`).join('')}</div>`;
+  $$('#newBox .cand').forEach((b) => b.addEventListener('click', async () => {
+    const c = items[+b.dataset.i];
+    b.disabled = true;
+    try {
+      const x = await api('/api/register', { root: c.root });
+      if (x.code === 0) { HATCHING.add(c.root); $('.go', b).textContent = tp('home.new.wait'); burst(['🥚', '✨']); }
+      else b.disabled = false;
+      toast(x.message || '', 4200);
+    } catch (e) { toast(e.message); b.disabled = false; }
+  }));
+}
+
+// 새 버전 받는 법 - 명령 하나를 보여 주고 복사하게 한다
+function updateSheet() {
+  openSheet({
+    title: `<span>🎁</span><span>${t('upd.title')}</span>`,
+    kind: 'update',
+    body: (el) => {
+      el.innerHTML = `<p class="sub">${t('upd.body')}</p>${copyBox('/claude-brain-update')}`;
+      bindCopy(el);
+    },
+  });
+}
+const copyBox = (text) => `<div class="copy-box"><code>${esc(text)}</code><button class="btn soft small" data-copy="${esc(text)}">${t('copy')}</button></div>`;
+function bindCopy(root) {
+  $$('[data-copy]', root).forEach((b) => b.addEventListener('click', async () => {
+    const v = b.dataset.copy;
+    try { await navigator.clipboard.writeText(v); } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e2) { /* 직접 고른다 */ } ta.remove();
+    }
+    toast(tp('copied'));
+  }));
 }
 
 // ---------------------------------------------------------------- 프로젝트 (뇌 하나)
@@ -447,7 +504,7 @@ async function pageProject(layer, alive, openWhat) {
   clearTimeout(topicTimer);
   let d;
   try { d = await api('/api/layer?l=' + encodeURIComponent(layer)); } catch (e) {
-    if (alive()) screen.innerHTML = e.message === tp('err.conn') || /401|token|토큰/i.test(e.message) ? noConn()
+    if (alive()) screen.innerHTML = e.message === tp('err.conn') || e.message === tp('err.token') ? noConn()
       : `<div class="empty" style="padding-top:120px"><span class="big">🔍</span>${t('notfound')}<br><a class="btn soft small" href="#/" style="margin-top:14px">${t('home')}</a></div>`;
     return;
   }
@@ -470,6 +527,7 @@ async function pageProject(layer, alive, openWhat) {
     </div>
     <div class="stage" id="stage" style="--stage-c:${tintOf(layer)}">
       <span class="pill mood-chip" data-tip="${esc(moodWhy(d.mood))}">${MOOD_EMOJI[d.mood.key] || ''} ${esc(moodName(d.mood))}</span>
+      ${d.muted ? `<span class="pill muted-chip">${t('mute.badge')}</span>` : ''}
       <button class="pill ai-chip" id="aiChip" ${d.count ? '' : 'hidden'}><span class="shimmer">${t('ai.busy')}</span></button>
       <button class="pet-wrap" id="petWrap" aria-label="${esc(t('pet.aria'))}" data-tip="${esc(t('pet.pat'))}">${pet(d.mood.key, st.key)}</button>
       <div class="hearts" id="hearts"></div>
@@ -493,6 +551,8 @@ async function pageProject(layer, alive, openWhat) {
     </div>
     <button class="ask-btn" id="aAsk" data-say="${esc(t('act.ask.say'))}" data-tip="${esc(kbdTip(tp('act.ask.tip'), 'C'))}">${pet('happy', st.key === 'egg' ? 'baby' : st.key)}
       <span><span class="al">${t('act.ask', { name })}</span><span class="as">${t('act.ask.s')}</span></span><span class="kbd">C</span></button>
+    ${isProj ? `<div class="card set" style="margin-top:14px"><div><div class="st">😴 ${t('mute.t')}</div><div class="sd">${t('mute.d')}</div></div>
+      <label class="switch"><input type="checkbox" id="pMute" ${d.muted ? 'checked' : ''} aria-label="${esc(t('mute.t'))}"><span></span></label></div>` : ''}
     ${kinds.length ? `<div class="h2">${t('kinds')}</div>
       <div class="kinds">${kinds.map((k) => `<i style="flex:${d.regions[k]};background:${REGION[k].c}" data-tip="${esc(t('kinds.tip', { name: regionName(k), n: d.regions[k] }))}"></i>`).join('')}</div>
       <div class="legend">${kinds.map((k) => `<span><i style="background:${REGION[k].c}"></i>${esc(regionName(k))} ${d.regions[k]}</span>`).join('')}</div>` : ''}
@@ -508,6 +568,11 @@ async function pageProject(layer, alive, openWhat) {
   if (isProj) {
     $('#aFeed').addEventListener('click', () => feedSheet(slug));
     $('#aPersona').addEventListener('click', () => personaSheet(slug));
+    $('#pMute').addEventListener('change', async (e) => {
+      const on = e.target.checked;
+      try { await api('/api/config', { action: on ? 'mute' : 'unmute', value: slug }); toast(tp(on ? 'mute.on' : 'mute.off')); if (alive()) route(); }
+      catch (err) { toast(err.message); e.target.checked = !on; }
+    });
   }
   // 버튼에 올리면 뇌가 반응한다
   $$('[data-say]').forEach((b) => {
@@ -703,7 +768,7 @@ function feedSheet(slug) {
         btn.disabled = true;
         try {
           const r = await api('/api/feed', { slug, text });
-          if (!r.ok) throw new Error(r.out || tp('feed.fail'));
+          if (!r.ok) { console.warn(r.out); throw new Error(tp('feed.fail')); }
           closeSheet(sh, true);
           await wait(250);
           jump(); burst(['🍙', '💕', '😋']); sayTemp(tp('feed.say'), 3200);
@@ -823,7 +888,19 @@ function memorySheet(opt = {}) {
         <button class="btn soft small more-btn" id="memMore" hidden></button>
         ${d.dormant_list && d.dormant_list.length ? `<details class="more" style="margin-top:16px"><summary>${t('mem.dormant', { n: d.dormant_list.length })}</summary>
           <p class="hint">${t('mem.dormant.hint')}</p>
-          <div class="list">${d.dormant_list.map((x) => `<button class="mem" data-path="${esc(x.path)}"><span class="em" style="background:var(--bg2)">💤</span><span><span class="tt">${esc(x.line.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))}</span><span class="mt" style="display:block">${t('mem.dormant.since', { date: x.since })}</span></span></button>`).join('')}</div></details>` : ''}`;
+          <div class="list">${d.dormant_list.map((x) => `<button class="mem" data-path="${esc(x.path)}"><span class="em" style="background:var(--bg2)">💤</span><span><span class="tt">${esc(x.line.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))}</span><span class="mt" style="display:block">${t('mem.dormant.since', { date: x.since })}</span></span></button>`).join('')}</div></details>` : ''}
+        <details class="more" id="archBox" style="margin-top:12px"><summary>${t('arch.h')}</summary>
+          <p class="hint">${t('arch.hint')}</p><div class="list" id="archList"><p class="hint shimmer">${t('detail.loading')}</p></div></details>`;
+      $('#archBox', el).addEventListener('toggle', async (ev) => {
+        if (!ev.target.open || ev.target.dataset.loaded) return;
+        ev.target.dataset.loaded = '1';
+        try {
+          const r = await api('/api/archive?l=' + encodeURIComponent(d.layer));
+          $('#archList', el).innerHTML = r.items.map((x, i) => `<button class="mem arch" data-i="${i}"><span class="em" style="background:var(--bg2)">🗂</span><span style="min-width:0"><span class="tt">${esc(x.title)}</span><span class="mt" style="display:block">${esc(archReason(x.reason))}${x.when ? ', ' + esc(x.when) : ''}</span></span></button>`).join('')
+            || `<div class="empty"><span class="big">🗂</span>${t('arch.none')}</div>`;
+          $$('#archList .arch', el).forEach((b) => b.addEventListener('click', () => archiveDetail(r.items[+b.dataset.i])));
+        } catch (e) { $('#archList', el).innerHTML = `<div class="out">${esc(e.message)}</div>`; }
+      });
       const chips = () => {
         const all = [{ label: tp('mem.all'), on: !f.topic && !f.region }]
           .concat(topics.map((x) => ({ label: x.emoji + ' ' + x.label, on: !!(f.topic && f.topic.label === x.label), topic: x })))
@@ -862,7 +939,40 @@ function memorySheet(opt = {}) {
 // 쉬운 말 풀이 - 기본 켬, 설정에서 끈다
 let EXPLAIN_ON = true;
 try { EXPLAIN_ON = localStorage.getItem('brainExplain') !== 'off'; } catch (e) { EXPLAIN_ON = true; }
-const FB_ICON = { confirm: '👍', outdated: '✏️', important: '⭐', forget: '🗑' };
+const FB_ICON = { confirm: '👍', outdated: '✏️', important: '⭐', forget: '🗑', restore: '♻️' };
+const archReason = (r) => tp(I18N.ko['arch.r.' + r] ? 'arch.r.' + r : 'arch.r.other');
+
+// 보관한 기억 - 왜 보관했는지와 원문을 보이고, 되살리기는 우체통으로 해마에게 맡긴다
+function archiveDetail(x) {
+  openSheet({
+    title: `<span>🗂</span><span>${t('arch.title')}</span>`,
+    full: true,
+    kind: 'detail',
+    body: async (el) => {
+      const inTray = () => TRAY.items.find((y) => y.path === x.path);
+      el.innerHTML = `<div class="plain"><div class="ps">${esc(x.title)}</div>
+          <div class="pr"><span class="pi" style="background:var(--bg2)">🗂</span><div><b>${t('arch.why')}</b><p>${esc(archReason(x.reason))}${x.note ? ': ' + esc(x.note) : ''}</p></div></div></div>
+        <div id="archAct" style="margin:12px 0"></div>
+        <details class="more" open><summary>${t('detail.orig')}</summary><div id="archBody" style="margin-top:6px"><p class="hint">${t('detail.opening')}</p></div></details>`;
+      const act = () => {
+        $('#archAct', el).innerHTML = inTray() ? `<div class="fb-state">${t('arch.in')}</div>` : `<button class="btn block mint" id="archGo">${t('arch.go')}</button>`;
+        const b = $('#archGo', el);
+        if (b) b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            const r = await api('/api/feedback/add', { layer: CUR.layer, path: x.path, title: x.title, kind: 'restore', text: '' });
+            TRAY.items = r.items; updateTrayBar(true); toast(tp('arch.in')); act();
+          } catch (e) { toast(e.message); b.disabled = false; }
+        });
+      };
+      act();
+      try {
+        const m = await api('/api/memory?p=' + encodeURIComponent(x.path));
+        if (el.isConnected) $('#archBody', el).innerHTML = `<article class="md box">${md(m.text, m.path.split('/').slice(0, -1).join('/'))}</article>`;
+      } catch (e) { if (el.isConnected) $('#archBody', el).innerHTML = `<div class="out">${esc(e.message)}</div>`; }
+    },
+  });
+}
 const SKEL = () => `<div class="skel big"></div><div class="skel"></div><div class="skel half"></div><div class="skel"></div><p class="hint shimmer" style="margin:8px 0 0">${t('detail.loading')}</p>`;
 
 function memoryDetail(path) {
@@ -1004,7 +1114,7 @@ function traySheet() {
     b.disabled = true;
     try {
       const r = await api('/api/feedback/send', { layer: CUR.layer });
-      if (!r.ok) throw new Error(r.out || tp('tray.fail'));
+      if (!r.ok) { console.warn(r.out); throw new Error(tp('tray.fail')); }
       TRAY.items = [];
       updateTrayBar(false);
       closeSheet(sh, true);
@@ -1054,7 +1164,7 @@ function chatSheet() {
     hist.forEach((h) => {
       html += `<div class="msg me"><div class="bb">${esc(h.q)}</div></div>`;
       if (h.a != null) {
-        html += `<div class="msg">${av()}<div class="bb">${esc(h.a)}${(h.refs || []).length ? `<div class="refs">${h.refs.map((r) => `<button data-path="${esc(r.path)}" data-tip="${esc(t('chat.ref.tip'))}">📖 ${esc(r.title)}</button>`).join('')}</div>` : ''}</div></div>`;
+        html += `<div class="msg">${av()}<div class="bb">${inlineCode(h.a)}${(h.refs || []).length ? `<div class="refs">${h.refs.map((r) => `<button data-path="${esc(r.path)}" data-tip="${esc(t('chat.ref.tip'))}">📖 ${esc(r.title)}</button>`).join('')}</div>` : ''}</div></div>`;
       }
     });
     if (busy) html += `<div class="msg">${av()}<div class="bb"><span class="typing"><i></i><i></i><i></i></span></div></div>`;
@@ -1475,6 +1585,13 @@ async function pageSettings(alive) {
     <div class="h2">${t('s.sleep.h')}</div>
     <div class="card set"><div><div class="st">${t('s.sleep')}</div><div class="sd">${t('s.sleep.d', { when: c.last_sleep ? fmtAgo(c.last_sleep) : tp('s.sleep.never') })}</div></div>
       <button class="btn sky small" id="sSleep">${t('s.sleep.btn')}</button></div>
+    <div class="h2">${t('us.h')}</div>
+    <div class="card">${['week', 'month'].map((k) => { const u = (ov.usage || {})[k] || {}; return `<div class="set us-row"><div><div class="st">${t('us.' + k)}</div>
+      <div class="sd">${u.runs ? t('us.line', { h: num(u.hippo), a: num(u.app) }) : t('us.none')}</div></div><b class="us-cost">${u.runs ? t('us.cost', { c: (u.cost || 0).toFixed(2) }) : ''}</b></div>`; }).join('')}
+      <p class="hint" style="margin:8px 2px 0">${t('us.hint')}</p></div>
+    <div class="h2">${t('bk.h')}</div>
+    <div class="card"><div class="set"><div><div class="st">${t('bk.t')}</div><div class="sd">${t('bk.d')}</div></div>
+      <button class="btn mint small" id="sBackup">${t('bk.btn')}</button></div><div id="bkOut"></div></div>
     <div class="h2">${t('s.view')}</div>
     <div class="card set"><div><div class="st">${t('s.explain')}</div><div class="sd">${t('s.explain.d')}</div></div>
       <label class="switch"><input type="checkbox" id="sExplain" ${EXPLAIN_ON ? 'checked' : ''} aria-label="${esc(t('s.explain'))}"><span></span></label></div>
@@ -1488,7 +1605,18 @@ async function pageSettings(alive) {
     <div class="card set" style="margin-top:20px"><div><div class="st">${t('s.quit')}</div><div class="sd">${t('s.quit.d')}</div></div>
       <button class="btn soft small" id="sQuit">${t('s.quit.btn')}</button></div>
     <button class="btn soft small" id="sWelcome" style="margin:16px auto 0;display:flex">${t('s.welcome')}</button>
-    <p class="hint center" style="margin-top:20px">${t('s.foot')}</p>`;
+    <p class="hint center" style="margin-top:20px">${t('s.foot')}${c.version ? '<br>' + t('s.ver', { v: c.version }) : ''}</p>`;
+  $('#sBackup').addEventListener('click', async (e) => {
+    const b = e.target; b.disabled = true;
+    try {
+      const r = await api('/api/backup', {});
+      $('#bkOut').innerHTML = `<p class="hint" style="margin:10px 2px 4px">✅ ${t('bk.done')} (${num(r.n)})</p>${copyBox(r.path)}
+        <p class="hint" style="margin:10px 2px 4px">${t('bk.restore')}</p>${copyBox(r.restore)}`;
+      bindCopy($('#bkOut'));
+      toast(tp('bk.done'));
+    } catch (err) { toast(err.message); }
+    b.disabled = false;
+  });
   $('#sOn').addEventListener('change', async (e) => {
     try { await api('/api/config', { action: e.target.checked ? 'on' : 'off' }); toast(tp(e.target.checked ? 'toast.on' : 'toast.off')); }
     catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
@@ -1640,6 +1768,23 @@ setInterval(async () => {
   const sig = ov ? JSON.stringify([ov.hippo, ov.queue, ov.config.enabled, ov.config.lang, ov.projects.map((p) => [p.count, p.mood.key, p.capacity, !!p.persona])]) : '';
   if (sig && sig !== lastSig) { if (lastSig) { if (ov.config.lang !== LANG) setLang(ov.config.lang); route(); } lastSig = sig; }
 }, 10000);
+
+// 맡긴 일이 끝나면 한 번 알린다(먹이, 우체통, 정리, 등록). 알린 것은 서버에 확인해 다시 뜨지 않게 한다
+async function checkApplied() {
+  if (document.hidden || !TOKEN) return;
+  let r;
+  try { r = await api('/api/applied'); } catch (e) { return; }
+  const done = (r.done || []).slice(0, 3);
+  if (!done.length) return;
+  done.forEach((x, i) => setTimeout(() => {
+    const head = x.status !== 'done' ? tp('ap.fail') : tp('ap.' + (I18N.ko['ap.' + x.kind] ? x.kind : 'tidy'), { n: x.n, slug: x.slug });
+    toast(x.first && x.status === 'done' && x.first !== '(dry-run)' ? head + '\n' + x.first : head, 5200);
+    if (x.status === 'done' && i === 0 && $('#stage')) { jump(); burst(['✨', '💡']); }
+  }, i * 5600));
+  try { await api('/api/applied/ack', { keys: done.map((x) => x.key) }); } catch (e) { /* 다음에 다시 알린다 */ }
+  if (done.some((x) => x.kind === 'register') && !CUR && !SHEETS.length) setTimeout(route, 800);
+}
+setInterval(checkApplied, 15000);
 
 // 시작 - 언어(brain 설정, 없으면 브라우저 언어)를 먼저 정하고 그린다
 (async function boot() {

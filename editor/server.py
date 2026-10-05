@@ -38,6 +38,13 @@ sys.path.insert(0, SCRIPTS)
 import lang as LANG  # noqa: E402
 import plat  # noqa: E402  OS 차이(경로, bash, 프로세스) - macOS, Linux, Windows
 import persona  # noqa: E402
+import cli_i18n  # noqa: E402  사람이 읽는 오류 글
+import usage  # noqa: E402  claude -p 사용량 기록
+
+
+def E(key, *args):
+    """[오류 글] 서버가 바라보는 설정 언어로 - 앱이 토스트로 보여 준다"""
+    return cli_i18n.m(key, *args, lang=config()['lang'])
 import slices  # noqa: E402
 
 TONE = {'ko': 'polite 해요체', 'en': 'friendly, plain English', 'ja': 'polite です/ます style', 'zh': 'friendly, plain Simplified Chinese'}
@@ -134,7 +141,7 @@ LAYER_RE = re.compile(r'^(common|stacks/[A-Za-z0-9_.-]+|projects/[A-Za-z0-9_.-]+
 
 def check_layer(layer):
     if not LAYER_RE.match(layer or '') or '..' in layer:
-        raise ValueError('레이어 이름이 아니다: %s' % layer)
+        raise ValueError(E('srv.bad_layer'))
     return layer
 
 
@@ -246,7 +253,32 @@ def config():
             'model': c.get('hippocampus_model', 'claude-sonnet-5-5'),
             'effort': c.get('hippocampus_effort', 'medium'), 'born': _read(os.path.join(ACTIVE, 'brain-born')).strip(),
             'last_sleep': int(last) if last.isdigit() else 0,
-            'sleep_summary': _read(os.path.join(HC, 'sleep', 'last-summary.txt')).strip()[:300]}
+            'sleep_summary': _read(os.path.join(HC, 'sleep', 'last-summary.txt')).strip()[:300],
+            'mute': [x for x in c.get('mute', '').split(',') if x], 'update': update_info(), 'version': code_version_label()}
+
+
+def update_info():
+    """[새 버전] 밤 정리(update.py check)가 남긴 .active/update-available: <변경 수>\t<최근 제목>\t<시각>"""
+    v = _read(os.path.join(ACTIVE, 'update-available')).strip().split('\t')
+    return {'n': int(v[0]), 'subject': v[1] if len(v) > 1 else ''} if v and v[0].isdigit() and int(v[0]) > 0 else None
+
+
+def code_version_label():
+    """[지금 코드 버전] git HEAD 의 짧은 해시(.git 을 직접 읽는다 - git 을 부르지 않는다). 모르면 빈 글"""
+    try:
+        g = os.path.join(BRAIN, '.git')
+        head = _read(os.path.join(g, 'HEAD')).strip()
+        if head.startswith('ref: '):
+            ref = head[5:]
+            v = _read(os.path.join(g, *ref.split('/'))).strip()
+            if not v:
+                for line in _read(os.path.join(g, 'packed-refs')).splitlines():
+                    if line.endswith(' ' + ref):
+                        v = line.split(' ')[0]
+            head = v
+        return head[:7] if re.match(r'^[0-9a-f]{7,40}$', head or '') else ''
+    except OSError:
+        return ''
 
 
 # ---------------------------------------------------------------- 상태 계산 (캐릭터)
@@ -327,6 +359,7 @@ def overview():
         pg = persona.load(r['slug'])
         s.update(r)
         s['persona'] = {'name': pg.get('name') or '', 'breed': pg.get('breed') or '', 'enabled': pg.get('enabled') is not False} if pg else None
+        s['muted'] = r['slug'] in cfg['mute']
         projects.append(s)
     shared = [summarize('common', None, hp, cfg)]
     for d in sorted(glob.glob(os.path.join(CX, 'stacks', '*'))):
@@ -340,7 +373,8 @@ def overview():
         pass
     return {'projects': projects, 'shared': shared, 'config': cfg, 'age': age,
             'hippo': {k: hp[k] for k in ('alive', 'current', 'processing')}, 'queue': len(hp['queue']),
-            'results': hp['results'][-8:][::-1]}
+            'results': hp['results'][-8:][::-1],
+            'usage': {'week': usage.summary(7, ACTIVE), 'month': usage.summary(30, ACTIVE)}}
 
 
 def layer_detail(layer):
@@ -359,6 +393,7 @@ def layer_detail(layer):
     s['region_names'] = REGION_NAMES
     s['results'] = [r for r in hp['results'] if (slug and r['slug'] == slug)][-10:][::-1]
     s['queue'] = [q for q in hp['queue'] if slug and q.get('slug') == slug]
+    s['muted'] = bool(slug) and slug in config()['mute']
     if slug:
         row = next((r for r in registry() if r['slug'] == slug), None)
         if row:
@@ -371,7 +406,7 @@ def read_memory(rel):
     p = os.path.realpath(os.path.join(CX, rel))
     root = os.path.realpath(CX)
     if not p.startswith(root + os.sep) or not p.endswith('.md') or os.sep + '.hippocampus' + os.sep in p:
-        raise ValueError('기억 저장소 밖의 경로')
+        raise ValueError(E('srv.outside'))
     st = strength().get(os.path.relpath(p, root)) or {}
     return {'path': os.path.relpath(p, root), 'text': _read(p)[:60000], 'mtime': int(os.path.getmtime(p)), 'strength': st}
 
@@ -422,7 +457,7 @@ def _claude_bin():
         p = os.path.expanduser(p)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
-    raise RuntimeError('claude 실행 파일을 찾지 못했다')
+    raise RuntimeError(E('srv.no_claude'))
 
 
 def _plugins_off():
@@ -434,8 +469,8 @@ def _plugins_off():
     return json.dumps({'enabledPlugins': dict((k, False) for k in sorted(on))}) if on else ''
 
 
-def haiku(prompt, system, timeout=120):
-    """[Haiku 한 번] 도구 없음, 플러그인,MCP 끔, 기본 시스템 프롬프트를 바꿔 끼운다(약 7천 토큰이 빠져 한 번에 0.001달러 안팎).
+def haiku(prompt, system, timeout=120, what='app'):
+    """[Haiku 한 번] 도구 없음, 플러그인,MCP 끔, 기본 시스템 프롬프트를 바꿔 끼운다(약 7천 토큰이 빠진다. 2026-10-05 측정: 한 번에 0.002~0.004달러).
     cortex 폴더에서 돌린다 - thalamus 가 brain 폴더 아래 세션을 건너뛴다. 결과 글(result)을 돌려준다"""
     env = dict(os.environ)
     for k in ('CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_MESSAGING_SOCKET',
@@ -450,25 +485,27 @@ def haiku(prompt, system, timeout=120):
     p = subprocess.run(args, input=prompt, capture_output=True, text=True, timeout=timeout, cwd=CX, env=env,
                        encoding='utf-8', errors='replace')   # 프롬프트는 stdin 으로 - Windows 명령줄은 3.2만 자가 상한이다
     if p.returncode != 0 and not p.stdout.strip():
-        raise RuntimeError((p.stderr or 'claude 종료 코드 %d' % p.returncode).strip()[:300])
-    return json.loads(p.stdout or '{}').get('result') or ''
+        raise RuntimeError((E('srv.claude_rc', p.returncode) + ('\n' + p.stderr.strip()[:240] if (p.stderr or '').strip() else '')))
+    d = json.loads(p.stdout or '{}')
+    usage.record('app', what, d, active=ACTIVE)
+    return d.get('result') or ''
 
 
 def json_in(text):
     a, b = text.find('{'), text.rfind('}')
     if a < 0 or b < a:
-        raise ValueError('JSON 이 없는 응답')
+        raise ValueError(E('srv.bad_reply'))
     return json.loads(text[a:b + 1])
 
 
-def haiku_json(prompt, system, timeout=120):
+def haiku_json(prompt, system, timeout=120, what='app'):
     """[Haiku 에 JSON 받기] 가끔 따옴표,줄바꿈이 깨진 JSON 이 온다 - 한 번 다시 묻는다. 두 번째도 깨지면 (None, 원문)"""
-    raw = haiku(prompt, system, timeout)
+    raw = haiku(prompt, system, timeout, what)
     try:
         return json_in(raw), raw
     except ValueError:
         raw = haiku(prompt + '\n\nYour previous reply was not valid JSON. Reply again with valid JSON only (escape quotes and newlines).',
-                    system, timeout)
+                    system, timeout, what)
         try:
             return json_in(raw), raw
         except ValueError:
@@ -489,20 +526,21 @@ def _topic_prompt(layer, mems, lang='ko'):
     return ('Below is the long-term memory list of "%s" (number. title | index gist). Group these memories into %s topics that show what this brain '
             'cares about most. Each topic should hold 2 or more memories.\n'
             '- label: %s in %s, readable at a glance (e.g. "Unity script structure", "ECS structure", "faithful porting", "deploy steps"). '
-            'Do not copy file names or slugs. Keep proper tech names like Unity, ECS, UGUI as is.\n'
+            'Do not copy file names or slugs. Keep proper tech names like Unity, ECS, UGUI as is, but write every other word in %s '
+            '(never mix languages, e.g. not "전투 mechanics").\n'
             '- emoji: one emoji that fits the topic\n'
             '- ids: memory numbers in that topic; each memory goes into only its best topic\n'
             '- order topics from most memories to fewest\n'
             '- motto: one sentence the brain itself says about what it values most, first person, %s, %s\n'
             'Output JSON only: {"motto":"...","topics":[{"label":"...","emoji":"...","ids":[1,2]}]}\n\n%s') % (
-        name, n, short, LANG.NAMES[lang], TONE[lang], 'max 60 characters' if lang == 'en' else 'max 28 characters', '\n'.join(rows))
+        name, n, short, LANG.NAMES[lang], LANG.NAMES[lang], TONE[lang], 'max 60 characters' if lang == 'en' else 'max 28 characters', '\n'.join(rows))
 
 
 def _topic_job(layer, mems, h, lang='ko'):
     try:
-        d, raw = haiku_json(_topic_prompt(layer, mems, lang), 'You group developer notes into topics and answer with JSON only.', timeout=180)
+        d, raw = haiku_json(_topic_prompt(layer, mems, lang), 'You group developer notes into topics and answer with JSON only.', timeout=180, what='topics')
         if d is None:
-            raise ValueError('주제 응답이 JSON 이 아니다')
+            raise ValueError(E('srv.bad_reply'))
         topics = []
         for t in d.get('topics') or []:
             ids = [i for i in t.get('ids') or [] if isinstance(i, int) and 1 <= i <= len(mems)]
@@ -607,9 +645,9 @@ def explain(rel, lang='ko'):
               'At most 3 terms, empty array if none. Mention file paths or identifiers only when needed.\n\n--- note (%s)\n%s') % (
         LANG.NAMES[lang], TONE[lang], 'max 45 characters' if cjk else 'max 90 characters', 'max 40 characters' if cjk else 'max 80 characters',
         'max 25 characters' if cjk else 'max 50 characters', m['path'], m['text'][:6000])
-    d, raw = haiku_json(prompt, EXPLAIN_SYS, timeout=90)
+    d, raw = haiku_json(prompt, EXPLAIN_SYS, timeout=90, what='explain')
     if d is None:
-        raise ValueError('풀이 응답이 JSON 이 아니다')
+        raise ValueError(E('srv.bad_reply'))
     out = {'summary': str(d.get('summary') or '')[:160], 'why': str(d.get('why') or '')[:500], 'when': str(d.get('when') or '')[:300],
            'check': str(d.get('check') or '')[:160],
            'terms': [{'word': str(t.get('word', ''))[:40], 'meaning': str(t.get('meaning', ''))[:100]} for t in (d.get('terms') or [])[:3] if isinstance(t, dict)]}
@@ -628,6 +666,7 @@ FB_KINDS = {
     'important': '중요: 기억 `%s` 는 사용자에게 중요하다 - 사용자 결정으로 표시해 쉽게 잊히지 않게 한다',
     'outdated': '정정: 기억 `%s` 의 내용이 틀렸거나 낡았다 - %s',
     'forget': '필요 없음: 사용자가 기억 `%s` 를 더는 필요 없다고 했다 - 아카이브한다(하드 삭제 아님)',
+    'restore': '되살리기: 보관함(_archive)의 기억 `%s` 를 사용자가 다시 쓰겠다고 했다 - 원래 자리로 옮기고 ARCHIVED 머리줄을 지운 뒤 인덱스 줄을 다시 단다',
 }
 _FB_LOCK = threading.Lock()
 
@@ -650,9 +689,9 @@ def _fb_save(layer, items):
 
 def feedback_add(layer, rel, title, kind, text):
     if kind not in FB_KINDS:
-        raise ValueError('모르는 피드백')
+        raise ValueError(E('srv.bad_feedback'))
     if kind == 'outdated' and not (text or '').strip():
-        raise ValueError('무엇이 달라졌는지 적어 주세요')
+        raise ValueError(E('srv.need_text'))
     read_memory(rel)
     with _FB_LOCK:
         items = [x for x in feedback_list(layer) if x['path'] != rel]   # 기억 하나에는 마지막 피드백 하나만
@@ -687,6 +726,7 @@ def feedback_send(layer):
             out, rc = run(['bash', os.path.join(SCRIPTS, 'remember.sh'), '--root', root] + args)
         if rc == 0:
             _fb_save(layer, [])
+            track('mailbox', out, layer[9:] if layer.startswith('projects/') else '', len(items))
     return {'ok': rc == 0, 'count': len(items), 'out': out}
 
 
@@ -695,19 +735,21 @@ def feedback_send(layer):
 # recall.sh 를 쓰지 않는다 - 검색 기록이 기억 강도에 쌓여 망각 판정이 흐려진다.
 ASK_SYS = ('You are the brain character of the "%s" project. Answer in %s, cute and warm (%s), short (2-5 sentences). '
            'Use only what is in the memories given below; if the answer is not in them, honestly say you don\'t remember that. Never make things up. '
+           'Write plain sentences without Markdown (no **, no #, no lists); wrap code names in `backticks` only. '
            'Put the numbers of the memories you used in refs. Output JSON only: {"answer":"...","refs":[1,2]}')
 ASK_EMPTY = {'ko': '아직 아무것도 기억하지 못해요. 이 프로젝트에서 같이 일하면 하나씩 배울게요!',
              'en': "I don't remember anything yet. I'll learn bit by bit as we work on this project together!",
              'ja': 'まだ何も覚えていません。このプロジェクトで一緒に働けば少しずつ覚えますね!',
              'zh': '我还什么都不记得。在这个项目里一起工作的话,我会一点点学起来!'}
 ASK_UNSURE = {'ko': '음… 잘 모르겠어요', 'en': "Hmm... I'm not sure", 'ja': 'うーん…よくわかりません', 'zh': '嗯…我不太确定'}
-TOKEN_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_.]{2,}|[가-힣]+')
+# 영문 낱말(식별자)은 통째로, 한글, 가나, 한자는 두 글자 조각으로 - 일본어, 중국어 질문도 기억에 걸리게
+TOKEN_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_.]{2,}|[가-힣]+|[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+')
 
 
 def _grams(text):
     out = set()
     for w in TOKEN_RE.findall(text.lower()):
-        if w[0] >= '가':
+        if not w[0].isascii():
             out.update(w[i:i + 2] for i in range(max(1, len(w) - 1)))
         else:
             out.add(w)
@@ -718,7 +760,7 @@ def ask(layer, q, history, lang='ko'):
     import math
     q = (q or '').strip()[:500]
     if not q:
-        raise ValueError('질문이 비었어요')
+        raise ValueError(E('srv.empty'))
     d = layer_data(layer)
     mems = d['memories']
     if not mems:
@@ -732,6 +774,9 @@ def ask(layer, q, history, lang='ko'):
     n = len(docs)
     scored = sorted(((sum(math.log(1 + n / df[t]) for t in g & qg), i) for i, g in enumerate(docs)), reverse=True)
     top = [i for sc, i in scored[:6] if sc > 0]
+    if len(top) < 3:
+        # 걸린 기억이 적으면(다른 언어로 묻거나 낱말이 겹치지 않을 때) 최근 기억으로 채운다 - 답은 Haiku 가 기억 안에서만 고른다
+        top += [i for i in sorted(range(n), key=lambda i: -mems[i].get('mtime', 0)) if i not in top][:6 - len(top)]
     if FAKEAI:
         return {'answer': '(모의) %s 에 대해 기억 %d개를 찾았어요.' % (q[:20], len(top)),
                 'refs': [{'path': mems[i]['path'], 'title': mems[i]['title']} for i in top[:3]]}
@@ -743,7 +788,7 @@ def ask(layer, q, history, lang='ko'):
     hist = '\n'.join('User: %s\nBrain: %s' % (h.get('q', '')[:200], h.get('a', '')[:300]) for h in (history or [])[-3:])
     prompt = ('%s\n\n--- memories\n%s\n\n--- question\n%s') % (('--- earlier conversation\n' + hist) if hist else '', '\n\n'.join(rows) or '(no related memories)', q)
     name = layer.split('/', 1)[1] if '/' in layer else 'shared'
-    r, raw = haiku_json(prompt, ASK_SYS % (name, LANG.NAMES[lang], TONE[lang]), timeout=90)
+    r, raw = haiku_json(prompt, ASK_SYS % (name, LANG.NAMES[lang], TONE[lang]), timeout=90, what='ask')
     if r is None:   # 두 번 다 JSON 이 깨졌다 - 답 문장만이라도 살린다
         m = re.search(r'"answer"\s*:\s*"(.*?)"\s*,\s*"refs"\s*:\s*\[([^\]]*)\]', raw, re.S)
         if m:
@@ -761,34 +806,38 @@ def ask(layer, q, history, lang='ko'):
 # ---------------------------------------------------------------- 동작 (기존 통로로만)
 def run(args, timeout=30, cwd=None):
     args = plat.argv(args)   # Windows 는 Git Bash 를 고르고(WSL bash 가 아니라) 경로를 / 표기로
-    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd or BRAIN,
+    p = subprocess.run(args, capture_output=True, timeout=timeout, cwd=cwd or BRAIN,
                        env=dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8'))
-    return ((p.stdout or '') + (p.stderr or '')).strip(), p.returncode
+    out = (p.stdout or b'') + (p.stderr or b'')
+    return out.decode('utf-8', 'replace').strip(), p.returncode
 
 
 def root_of(slug):
     row = next((r for r in registry() if r['slug'] == slug), None)
     if not row:
-        raise ValueError('registry 에 없는 프로젝트: %s' % slug)
+        raise ValueError(E('srv.bad_project'))
     return row['root']
 
 
 def feed(slug, text):
     text = (text or '').strip()
     if not text:
-        raise ValueError('새길 내용이 비었어요')
+        raise ValueError(E('srv.empty'))
     if DRYRUN:
         root_of(slug)
+        track('feed', '', slug)
         return {'ok': True, 'out': '(모의) 큐 투입: %s' % text[:40]}
     out, rc = run(['bash', os.path.join(SCRIPTS, 'remember.sh'), '--root', root_of(slug),
                    '%s - 근거: 사용자가 brain 에디터에서 직접 남김 %s' % (text[:2000], datetime.date.today().isoformat())])
+    if rc == 0:
+        track('feed', out, slug)
     return {'ok': rc == 0, 'out': out}
 
 
 def correct(slug, rel, text):
     text = (text or '').strip()
     if not text:
-        raise ValueError('정정 내용이 비었어요')
+        raise ValueError(E('srv.empty'))
     read_memory(rel)   # 경로 검사
     root = root_of(slug) if slug else '/'   # 공용,스택 기억은 프로젝트 밖(/)으로 넘긴다 - 레이어는 해마가 정한다
     if DRYRUN:
@@ -815,6 +864,7 @@ def tidy(layer, mode, dry):
         return res
     if DRYRUN:
         res['enqueued'] = ['(모의) 큐 투입: %s' % s['id'] for s in sl]
+        track('tidy', '', layer[9:] if layer.startswith('projects/') else '', len(sl))
         return res
     tmp = os.path.join(HC, 'editor-req')
     os.makedirs(tmp, exist_ok=True)
@@ -826,12 +876,13 @@ def tidy(layer, mode, dry):
     out, rc = run([sys.executable, os.path.join(SCRIPTS, 'slices.py'), '--make-requests', due, '--registry',
                    os.path.join(CX, 'registry.md'), '--out', tmp, '--caller', 'brain-editor-tidy'])
     if rc != 0:
-        raise RuntimeError(out)
+        raise RuntimeError(E('srv.queue_fail', out.strip()[:200]))
     logs = []
     for r in sorted(glob.glob(os.path.join(tmp, 'req-*.json'))):
         o, _ = run(['bash', os.path.join(SCRIPTS, 'hippocampus-enqueue.sh'), r])
         logs.append(o.splitlines()[0] if o else '')
     res['enqueued'] = logs
+    track('tidy', '\n'.join(logs), layer[9:] if layer.startswith('projects/') else '', len(sl))
     return res
 
 
@@ -846,11 +897,148 @@ def sleep_now():
     return {'ok': True}
 
 
-def set_config(action, value):
-    allowed = {'on': [], 'off': [], 'preset': ['default', 'eco', 'quality'], 'lang': list(LANG.LANGS)}
-    if action not in allowed or (allowed[action] and value not in allowed[action]):
-        raise ValueError('모르는 설정')
+# ---------------------------------------------------------------- 맡긴 일의 반영 알림
+# 앱에서 해마에게 맡긴 일(먹이, 우체통, 정리, 등록)의 큐 id 를 .active/pending.json 에 남기고, done 파일이 생기면 앱이 한 번 알린다.
+PENDING = os.path.join(ACTIVE, 'pending.json')
+QID_RE = re.compile(r'\d{8}T\d{6}Z-[A-Za-z0-9_-]+')
+_PEND_LOCK = threading.Lock()
+
+
+def track(kind, out, slug='', n=1):
+    """[맡긴 일 남기기] out(큐 투입 출력)에서 큐 id 를 찾아 남긴다. 모의 실행은 가짜 id 로 3초 뒤 끝난 것으로 친다"""
+    ids = QID_RE.findall(out or '')
     if DRYRUN:
+        ids = ['dry-%s-%s' % (kind, secrets.token_hex(3))]
+    if not ids:
+        return
+    with _PEND_LOCK:
+        items = [x for x in (_json(PENDING, []) or []) if isinstance(x, dict) and time.time() - x.get('t', 0) < 3 * 86400]
+        items.append({'ids': ids, 'kind': kind, 'slug': slug or '', 'n': n, 't': int(time.time())})
+        os.makedirs(ACTIVE, exist_ok=True)
+        with open(PENDING + '.tmp', 'w', encoding='utf-8') as f:
+            json.dump(items[-50:], f, ensure_ascii=False)
+        os.replace(PENDING + '.tmp', PENDING)
+
+
+def applied():
+    """[끝난 일] 맡긴 일 가운데 큐 id 가 모두 done 이 된 것 - [{key, kind, slug, n, status, first}]. 아직이면 waiting 에 센다"""
+    out, waiting = [], 0
+    for x in _json(PENDING, []) or []:
+        if not isinstance(x, dict) or not isinstance(x.get('ids'), list):
+            continue
+        sts, first = [], ''
+        for i in x['ids']:
+            if str(i).startswith('dry-'):
+                sts.append('done' if time.time() - x.get('t', 0) > 3 else None)
+                first = first or '(dry-run)'
+                continue
+            r = _json(os.path.join(HC, 'done', os.path.basename(str(i)) + '.json'))
+            if not isinstance(r, dict):
+                sts.append(None)
+                continue
+            sts.append(r.get('status') or '?')
+            first = first or next((l for l in (r.get('summary') or '').splitlines() if l.strip()), '')[:160]
+        if None in sts:
+            waiting += 1
+            continue
+        bad = [st for st in sts if st not in ('done', 'partial')]
+        out.append({'key': '%s:%d' % (x['ids'][0], x.get('t', 0)), 'kind': x.get('kind'), 'slug': x.get('slug') or '',
+                    'n': x.get('n') or 1, 'status': bad[0] if bad else 'done', 'first': first})
+    return {'done': out, 'waiting': waiting}
+
+
+def applied_ack(keys):
+    keys = set(k for k in (keys or []) if isinstance(k, str))
+    with _PEND_LOCK:
+        items = [x for x in (_json(PENDING, []) or []) if isinstance(x, dict) and isinstance(x.get('ids'), list)
+                 and '%s:%d' % (x['ids'][0], x.get('t', 0)) not in keys]
+        with open(PENDING + '.tmp', 'w', encoding='utf-8') as f:
+            json.dump(items, f, ensure_ascii=False)
+        os.replace(PENDING + '.tmp', PENDING)
+    return {'ok': True}
+
+
+# ---------------------------------------------------------------- 아직 모르는 프로젝트, 지금 등록
+_CAND = {'t': 0, 'items': []}
+
+
+def candidates(force=False):
+    """[등록 후보] 최근 14일 Claude Code 대화록이 있는 등록 안 된 git 폴더(replay.suggest_register 를 느슨하게). 10분 캐시"""
+    if DRYRUN:
+        return [{'root': '/Users/demo/dev/new-app', 'name': 'new-app', 'sessions': 3, 'prompts': 12, 'last': int(time.time()) - 3600}]
+    if not force and time.time() - _CAND['t'] < 600:
+        return _CAND['items']
+    try:
+        import replay
+        rows = replay.suggest_register(since_days=14, min_sessions=1, min_prompts=2, with_time=True)
+    except Exception:
+        rows = []
+    items = [{'root': r, 'name': os.path.basename(r.rstrip('/')), 'sessions': s, 'prompts': pr, 'last': int(mt)} for r, s, pr, mt in rows[:8]]
+    _CAND.update(t=time.time(), items=items)
+    return items
+
+
+def register_project(root):
+    """[지금 등록] 후보 목록에 있는 폴더만 받는다(앱이 아무 경로나 등록시키지 않게)"""
+    if not any(c['root'] == root for c in candidates()):
+        raise ValueError(E('srv.bad_project'))
+    if DRYRUN:
+        track('register', '', os.path.basename(root))
+        return {'code': 0, 'message': '(dry-run) %s' % root, 'slug': os.path.basename(root)}
+    out, rc = run([sys.executable, os.path.join(SCRIPTS, 'register.py'), '--json', root], timeout=30)
+    try:
+        r = json.loads(out.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise RuntimeError(E('srv.queue_fail', out[:200]))
+    if r.get('code') == 0 and r.get('id'):
+        track('register', r['id'], r.get('slug') or '')
+        _CAND['t'] = 0
+    return r
+
+
+# ---------------------------------------------------------------- 보관함 (잊은 기억)
+ARCH_RE = re.compile(r'^>\s*ARCHIVED\s*\(([^)]*)\)\s*(?:@\s*(\S+))?\s*(?:-\s*(.*))?$', re.M)
+
+
+def archive_list(layer):
+    """[보관함] <레이어>/_archive/*.md - 해마가 잊으면서 옮긴 기억. [{path, title, reason, when, note, mtime}]"""
+    check_layer(layer)
+    base = os.path.join(CX, *layer.split('/'), '_archive')
+    out = []
+    for p in sorted(glob.glob(os.path.join(base, '**', '*.md'), recursive=True)):
+        txt = _read(p, 4000)
+        m = ARCH_RE.search(txt)
+        title = next((l[2:].strip() for l in txt.splitlines() if l.startswith('# ')), os.path.basename(p)[:-3])
+        reason = (m.group(1).strip() if m else '').split(':')[0]
+        out.append({'path': os.path.relpath(p, CX).replace(os.sep, '/'), 'title': title[:160], 'reason': reason,
+                    'when': (m.group(2) or '').strip()[:20] if m else '', 'note': (m.group(3) or '').strip()[:200] if m else '',
+                    'mtime': int(os.path.getmtime(p))})
+    out.sort(key=lambda x: -x['mtime'])
+    return out[:300]
+
+
+# ---------------------------------------------------------------- 백업
+def make_backup():
+    if DRYRUN:
+        return {'path': os.path.join(os.path.expanduser('~'), 'Downloads', 'brain-backup-dry-run.zip'), 'n': 0,
+                'restore': 'bash %s restore <zip>' % plat.norm(os.path.join(SCRIPTS, 'backup.sh'))}
+    import backup
+    path, n = backup.make()
+    return {'path': plat.norm(path), 'n': n, 'restore': 'bash %s restore <zip>' % plat.norm(os.path.join(SCRIPTS, 'backup.sh'))}
+
+
+def set_config(action, value):
+    allowed = {'on': [], 'off': [], 'preset': ['default', 'eco', 'quality'], 'lang': list(LANG.LANGS),
+               'mute': [r['slug'] for r in registry()], 'unmute': [r['slug'] for r in registry()]}
+    if action not in allowed or (allowed[action] and value not in allowed[action]) or (action in ('mute', 'unmute') and not value):
+        raise ValueError(E('srv.bad_feedback'))
+    if DRYRUN:
+        if action in ('mute', 'unmute'):
+            p = os.path.join(ACTIVE, 'config')
+            cur = [x for x in config()['mute'] if x != value] + ([value] if action == 'mute' else [])
+            lines = [x for x in _read(p).splitlines() if x and not x.startswith('mute=')] + ['mute=' + ','.join(cur)]
+            with open(p, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines) + '\n')
         if action == 'lang':
             p = os.path.join(ACTIVE, 'config')
             lines = [x for x in _read(p).splitlines() if x and not x.startswith('lang=')] + ['lang=' + value]
@@ -908,7 +1096,7 @@ class H(BaseHTTPRequestHandler):
             with open(p, 'rb') as f:
                 return self._send(200, f.read(), TYPES.get(os.path.splitext(p)[1], 'application/octet-stream'))
         if not self._auth(qs):
-            return self._send(401, {'error': '토큰이 맞지 않아요. /claude-brain-app 로 다시 여세요'})
+            return self._send(401, {'error': 'token'})
         try:
             q = lambda k, d='': (qs.get(k) or [d])[0]  # noqa: E731
             if u.path == '/api/overview':
@@ -928,6 +1116,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {'items': feedback_list(q('l'))})
             if u.path == '/api/hippo':
                 return self._send(200, hippo())
+            if u.path == '/api/applied':
+                return self._send(200, applied())
+            if u.path == '/api/candidates':
+                return self._send(200, {'items': candidates(q('force') == '1')})
+            if u.path == '/api/archive':
+                return self._send(200, {'items': archive_list(q('l'))})
             if u.path == '/api/persona':
                 slug, L = q('slug'), lang_of(q('lang'))
                 g = persona.load(slug)
@@ -939,7 +1133,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {'graph': g, 'compiled': persona.compile_graph(g, L)})
             return self._send(404, {'error': 'no api'})
         except Exception as e:
-            return self._send(400, {'error': '%s: %s' % (e.__class__.__name__, e)})
+            return self._send(400, {'error': err_text(e)})
 
     def do_POST(self):
         LAST_HIT[0] = time.time()
@@ -947,7 +1141,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(403, {'error': 'host'})
         u = urlparse(self.path)
         if not self._auth({}):
-            return self._send(401, {'error': '토큰이 맞지 않아요'})
+            return self._send(401, {'error': 'token'})
         try:
             n = int(self.headers.get('Content-Length') or 0)
             body = json.loads(self.rfile.read(min(n, 2 * 1024 * 1024)).decode('utf-8') or '{}')
@@ -984,12 +1178,25 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, ask(body.get('layer') or '', body.get('q') or '', body.get('history') or [], lang_of(body.get('lang'))))
             if u.path == '/api/config':
                 return self._send(200, set_config(body.get('action'), body.get('value')))
+            if u.path == '/api/applied/ack':
+                return self._send(200, applied_ack(body.get('keys')))
+            if u.path == '/api/register':
+                return self._send(200, register_project(body.get('root') or ''))
+            if u.path == '/api/backup':
+                return self._send(200, make_backup())
             if u.path == '/api/quit':
                 threading.Thread(target=lambda: (time.sleep(0.3), self.server.shutdown()), daemon=True).start()
                 return self._send(200, {'ok': True})
             return self._send(404, {'error': 'no api'})
         except Exception as e:
-            return self._send(400, {'error': '%s: %s' % (e.__class__.__name__, e)})
+            return self._send(400, {'error': err_text(e)})
+
+
+def err_text(e):
+    """[사용자에게 보일 오류 글] 우리가 낸 오류(ValueError, RuntimeError)는 글만, 그 밖은 종류까지"""
+    if isinstance(e, (ValueError, RuntimeError)) and str(e) and not isinstance(e, json.JSONDecodeError):
+        return str(e)
+    return '%s: %s' % (e.__class__.__name__, e)
 
 
 def idle_watch(srv):
@@ -998,6 +1205,12 @@ def idle_watch(srv):
         if time.time() - LAST_HIT[0] > IDLE_EXIT:
             srv.shutdown()
             return
+
+
+def code_stamp():
+    """[코드 도장] 서버, 화면, 스크립트 파일의 가장 늦은 수정 시각 - editor.sh 가 같은 계산으로 비교해 바뀌었으면 서버를 다시 띄운다"""
+    fs = [os.path.abspath(__file__)] + glob.glob(os.path.join(HERE, 'web', '*')) + glob.glob(os.path.join(SCRIPTS, '*.py'))
+    return int(max((os.path.getmtime(f) for f in fs if os.path.isfile(f)), default=0))
 
 
 def main():
@@ -1019,7 +1232,7 @@ def main():
         os.makedirs(ACTIVE, exist_ok=True)
         tmp = STATE + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump({'pid': os.getpid(), 'port': port, 'token': TOKEN, 'started': int(time.time())}, f)
+            json.dump({'pid': os.getpid(), 'port': port, 'token': TOKEN, 'started': int(time.time()), 'code': code_stamp()}, f)
         os.chmod(tmp, 0o600)
         os.replace(tmp, STATE)
     threading.Thread(target=idle_watch, args=(srv,), daemon=True).start()

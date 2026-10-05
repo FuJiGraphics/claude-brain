@@ -627,3 +627,18 @@ textarea:focus-visible, .input:focus-visible { outline: none; }
 .bubble { max-width: min(220px, calc(100% - 16px)); }
 .bubble > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bubble > span:first-child, .bubble > .n { flex: none; }
+
+/* ---- 새 기능: 쉬는 프로젝트, 복사 상자, 사용량 ---- */
+.toast { white-space: pre-line; }
+.pet-tile.muted { opacity: .68; }
+.pet-tile.muted svg { filter: grayscale(.55); }
+.pet-tile.muted .alert { animation: none; }
+.muted-chip { position: absolute; top: 50px; left: 16px; z-index: 3; background: var(--bg2); }
+.copy-box { display: flex; align-items: center; gap: 8px; background: var(--bg2); border-radius: 14px; padding: 8px 8px 8px 12px; margin-top: 8px; }
+.copy-box code { flex: 1; min-width: 0; font-size: 12.5px; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.copy-box .btn { flex: none; }
+.us-row { padding: 4px 0; }
+.us-row + .us-row { border-top: 1px solid var(--line, rgba(0,0,0,.06)); margin-top: 6px; padding-top: 10px; }
+.us-cost { font-size: 15px; white-space: nowrap; }
+.set > .btn { flex: none; white-space: nowrap; }
+.chat .bb code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 6px; word-break: break-all; }
