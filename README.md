@@ -106,7 +106,7 @@ Which one should you use? A few rules that every session needs are best kept in 
 
 ## The brain app
 
-Type `/claude-brain-app` and a small phone-shaped window opens. It runs as a Chrome or Edge app window and cannot be reached from outside this computer.
+Type `/claude-brain-app` and a small phone-shaped window opens. It runs as a Chrome or Edge app window and cannot be reached from outside this computer. On macOS, if the window is already open, typing the command again brings that window to the front instead of opening another one. The first time, macOS may ask whether to allow controlling Google Chrome.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/FuJiGraphics/claude-brain/media/en-home.png" alt="brain app home" width="300">
@@ -119,7 +119,8 @@ Type `/claude-brain-app` and a small phone-shaped window opens. It runs as a Chr
 - Plain-word explanations: notes written by an AI are short and dense. Open a memory and you first get a one-line summary, why it is remembered, when it comes up, and the jargon explained.
 - Feedback: each memory comes with a question like "Do deploys still go through the release script?". Tap "Yes, still right", "It changed", "Important" or "No longer needed". Your answers wait in a mailbox until you tap "Send all to the hippocampus", and the app lets you know once they have been applied.
 - Ask: chat with your project's brain. It answers only from its memories and shows which ones it used.
-- Feed and tidy up: tell it something it must remember, or ask the hippocampus to tidy up when the head gets heavy.
+- Feed and tidy up: tell it something it must remember, or ask the hippocampus to tidy up when the head gets heavy. A tidy-up does not delete memories to make room. It compresses heavy indexes and splits them by topic until each one is under 70% of its limit.
+- Journal: see what the hippocampus is working on and what is waiting. You can have it stop after the current job, or clear all waiting jobs at once. Cleared jobs are moved to a side folder, not deleted.
 - Projects brain doesn't know yet: folders you recently worked on with Claude Code that are not registered. Tap "Hatch" and the project's brain appears within a minute or two.
 - Dormant memories and the archive: memories tucked away for lack of use show up as "sleeping memories" in the memory list, and memories the hippocampus let go while tidying wait in the archive, where you can bring them back.
 - Rest: let brain take a break in one project only.
@@ -236,7 +237,7 @@ From then on, `/claude-brain-update` is all you need.
 
 ## Good to know
 
-- Measurements come from one person's projects (macOS, mostly Unity/C# and a VS Code extension). The rules for pulling clues out of errors were tuned on C# compile errors. Recall by the names of files you open or edit works in any language. Inside commands, brain recognizes source and config file extensions of common languages, and API names written as capitalized dotted calls such as `PaymentClient.Charge(`.
+- Measurements come from one person's projects (macOS, mostly Unity/C# and a VS Code extension). The rules for pulling clues out of errors were tuned on C# compile errors. Recall by the names of files you open or edit works in any language. Inside commands, brain recognizes source and config file extensions of common languages. For API names it reads capitalized dotted calls such as `PaymentClient.Charge(`, and, in code being edited, multi-word function names such as `chargeCard(` or `charge_card(`. A file named with a single common word, such as `charge.ts`, counts as a clue only when that word appears in the file name or title of a project or stack memory.
 - Windows support is in beta. Paths, hooks, Task Scheduler and the app were ported and reviewed, but it has not seen much use on real Windows machines yet. If something breaks, an issue would be greatly appreciated.
 - It spends more time and tokens on context-heavy work (see the benchmark above).
 - The hippocampus is an unsupervised agent on your computer. It has deny rules, but if that makes you uneasy, you can set `scripts/hippocampus-perm.mode` to `acceptEdits`. Be aware that the hippocampus then cannot write memory files, so brain stops learning (recall keeps working).
