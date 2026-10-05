@@ -16,19 +16,48 @@ SKILL_DIR="$BRAIN"
 nw_need_python
 MODE="install"; SLEEP=1
 for a in "$@"; do case "$a" in --uninstall) MODE="uninstall";; --no-sleep) SLEEP=0;; esac; done
+# 언어 - 처음 설치면 OS 언어로 정한다(ko, en, ja, zh 밖이면 en). 이미 정했으면 그대로 둔다. 설치 글도 이 언어로 나온다
+mkdir -p "$BRAIN/.active"
+if [ "$MODE" = install ] && ! grep -q '^lang=' "$BRAIN/.active/config" 2>/dev/null; then
+  echo "lang=$(nw_py "$BRAIN/scripts/lang.py" detect)" >> "$BRAIN/.active/config"
+fi
+nw_i18n in
 CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; CFG="${CFG%/}"
 [ -d "$CFG" ] && CFG="$(cd "$CFG" && pwd)"   # 끝 슬래시, 상대경로를 정리한다 - 거부 규칙과 경로 비교가 문자열로 맞아야 한다
 # brain 이 <설정 폴더>/skills/brain 에 있으면 그 설정 폴더를 고쳐야 한다. 환경이 다른 폴더를 가리키면 엉뚱한 설정을 고치게 되므로 멈춘다.
 if [ "$(basename "$(dirname "$BRAIN")")" = "skills" ]; then
   LOC="$(dirname "$(dirname "$BRAIN")")"
   if [ -f "$LOC/settings.json" ] && [ ! "$LOC" -ef "$CFG" ]; then
-    echo "중단: brain 은 $LOC/skills 에 있는데 설정 폴더는 $CFG 다 - CLAUDE_CONFIG_DIR=$LOC 로 다시 돌린다"; exit 1
+    nw_say in_loc_stop "$LOC" "$CFG" "$LOC"; exit 1
   fi
 fi
 TS="$(date +%Y%m%d-%H%M%S)"
 # logs 는 launchd 가 잠 출력을 쓰는 곳이다(plist StandardOutPath) - 없는 폴더면 첫 잠이 뜨지 못할 수 있다
 mkdir -p "$BRAIN/.active" "$BRAIN/cortex/.hippocampus/logs"
 [ -f "$BRAIN/.active/brain-born" ] || date +%F > "$BRAIN/.active/brain-born"
+[ "$MODE" = install ] && nw_say in_lang "$M_native"
+# 설치 선택을 남긴다 - /claude-brain-update 가 install.sh 를 다시 돌릴 때 같은 선택(--no-sleep)을 쓴다
+if [ "$MODE" = install ]; then if [ "$SLEEP" = 0 ]; then echo "--no-sleep" > "$BRAIN/.active/install-opts"; else rm -f "$BRAIN/.active/install-opts"; fi; fi
+
+# 0. 기억 저장소 - 저장소의 seed/cortex 골격 중 없는 파일만 채운다. cortex/ 는 git 이 추적하지 않는다(사용자 기억이 자라는 곳)
+if [ "$MODE" = install ]; then
+  nw_py - "$BRAIN/seed/cortex" "$BRAIN/cortex" <<'PY' && nw_say in_seed "$(nw_tool_path "$BRAIN/cortex")"
+import os, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+if not os.path.isfile(os.path.join(src, 'registry.md')):
+    sys.exit(1)   # 저장소가 온전하지 않다 - 빈 기억 저장소로 설치하지 않는다(아래 셸이 알린다)
+for root, dirs, files in os.walk(src):
+    rel = os.path.relpath(root, src)
+    os.makedirs(os.path.join(dst, rel), exist_ok=True)
+    for f in files:
+        if f == '.gitkeep':
+            continue
+        t = os.path.join(dst, rel, f)
+        if not os.path.exists(t):
+            shutil.copyfile(os.path.join(root, f), t)
+PY
+  [ -f "$BRAIN/cortex/registry.md" ] || { nw_say in_seed_fail "$(nw_tool_path "$BRAIN/seed/cortex")"; exit 1; }
+fi
 # backup <파일>: 고치기 전 사본. 가장 최근 사본과 같으면 새로 만들지 않는다(여러 번 돌려도 사본이 쌓이지 않게)
 backup() {
   [ -f "$1" ] || return 0
@@ -43,17 +72,19 @@ backup "$CFG/settings.json"
 mkdir -p "$CFG"
 # 훅이 부를 파이썬 - Windows 는 python3 이 없고 python 이나 py 런처만 있는 경우가 많다. 경로는 파이썬이 읽는 표기(C:/...)로 넘긴다
 case "$NW_PY" in py) PYHOOK="py -3" ;; *) PYHOOK="$NW_PY" ;; esac
-nw_py - "$CFG/settings.json" "$(nw_tool_path "$BRAIN")" "$MODE" "$PYHOOK" <<'PY' || { echo "중단: 훅을 등록하지 못했다 - $CFG/settings.json 을 확인한 뒤 다시(CLAUDE.md, 잠 예약은 건드리지 않았다)"; exit 1; }
+nw_py - "$CFG/settings.json" "$(nw_tool_path "$BRAIN")" "$MODE" "$PYHOOK" <<'PY' || { nw_say in_hook_fail "$CFG/settings.json"; exit 1; }
 import json, os, shlex, stat, sys
 path, brain, mode = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, os.path.join(brain, 'scripts'))
+from cli_i18n import m
 path = os.path.realpath(path)   # dotfiles 로 관리하는 심링크면 링크를 끊지 않고 대상 파일을 고친다
 try:
     d = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
 except ValueError as e:
-    print('settings.json 이 JSON 이 아니다: %s' % e)
+    print(m('in.not_json', e))
     sys.exit(1)
 if not isinstance(d, dict) or not isinstance(d.get('hooks', {}), dict):
-    print('settings.json 의 형식이 예상과 다르다(최상위나 hooks 가 객체가 아님)')
+    print(m('in.bad_shape'))
     sys.exit(1)
 hooks = d.setdefault('hooks', {})
 # 끝의 exit 0 이 핵심이다: 파일이 없으면 python3 이 종료 코드 2 를 내는데, PreToolUse 훅의 2 는 '모든 도구 호출 차단'이다.
@@ -105,22 +136,19 @@ json.dump(d, open(tmp, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 if os.path.exists(path):
     os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode))   # 0600 같은 원래 권한 유지
 os.replace(tmp, path)
-print('훅: %s (%s)' % ('등록' if mode == 'install' else '해제', path))
+print(m('in.hooks_on' if mode == 'install' else 'in.hooks_off', path))
 PY
 
 # 2. 기억 소유 한 줄
 MD="$CFG/CLAUDE.md"
 backup "$MD"
-# 언어 - 처음 설치면 OS 언어로 정한다(ko, en, ja, zh 밖이면 en). 이미 정했으면 그대로 둔다. 바꾸기: scripts/config.sh lang <언어>
-if [ "$MODE" = install ] && ! grep -q '^lang=' "$BRAIN/.active/config" 2>/dev/null; then
-  echo "lang=$(nw_py "$BRAIN/scripts/lang.py" detect)" >> "$BRAIN/.active/config"
-fi
 LANG_NOW="$(nw_py "$BRAIN/scripts/lang.py" get)"
-nw_py - "$MD" "$MODE" "$BRAIN/scripts" "$LANG_NOW" <<'PY' || { echo "중단: CLAUDE.md 를 고치지 못했다 - 훅은 이미 걸렸다. $MD 를 확인한 뒤 install.sh 를 다시 돌린다"; exit 1; }
+nw_py - "$MD" "$MODE" "$BRAIN/scripts" "$LANG_NOW" <<'PY' || { nw_say in_md_fail "$MD"; exit 1; }
 import os, re, sys
 path, mode = sys.argv[1], sys.argv[2]
 sys.path.insert(0, sys.argv[3])
 import lang
+from cli_i18n import m
 path = os.path.realpath(path)
 s = open(path, encoding='utf-8').read() if os.path.exists(path) else ''
 begin, end = '<!-- brain:begin -->', '<!-- brain:end -->'
@@ -128,36 +156,14 @@ s = re.sub(r'\n*' + re.escape(begin) + r'.*?' + re.escape(end) + r'\n?', '\n', s
 if mode == 'install':
     s += '\n' + begin + '\n' + lang.T[sys.argv[4]]['claude_md'] + '\n' + end + '\n'   # 네 언어의 [기억] 표시를 모두 적는다
 open(path, 'w', encoding='utf-8').write(s)
-print('기억 소유 한 줄: %s (%s)' % ('추가' if mode == 'install' else '제거', path))
+print(m('in.md_on' if mode == 'install' else 'in.md_off', path))
 PY
 
-# 2b. 명령어 - <설정 폴더>/commands/claude-brain-*.md. 저장소 commands/ 템플릿의 {{BRAIN}} 을 이 설치 경로로 채워 만든다.
-# 자동완성에 /claude-brain-status 처럼 하나씩 뜬다. 표식 줄(brain:command)이 있는 파일만 이 스크립트 것으로 보고 고치거나 지운다.
-nw_py - "$BRAIN/commands" "$CFG/commands" "$BRAIN" "$MODE" <<'PY' || echo "경고: 명령어 파일을 만들지 못했다 - 훅과 기억은 정상"
-import glob, os, sys
-src, dst, brain, mode = sys.argv[1:5]
-MARK = '<!-- brain:command'
-mine = lambda f: MARK in open(f, encoding='utf-8').read()
-want = {}
-if mode == 'install':
-    for t in sorted(glob.glob(os.path.join(src, 'claude-brain-*.md'))):
-        want[os.path.basename(t)] = open(t, encoding='utf-8').read().replace('{{BRAIN}}', brain)
-    os.makedirs(dst, exist_ok=True)
-n_add = n_del = 0
-for f in glob.glob(os.path.join(dst, 'claude-brain-*.md')):
-    if os.path.basename(f) not in want and mine(f):
-        os.remove(f); n_del += 1
-for name, text in want.items():
-    f = os.path.join(dst, name)
-    if os.path.exists(f) and not mine(f):
-        print('건너뜀: %s 는 사용자 파일이다' % f); continue
-    if not os.path.exists(f) or open(f, encoding='utf-8').read() != text:
-        open(f, 'w', encoding='utf-8').write(text); n_add += 1
-if mode == 'install':
-    print('명령어: /claude-brain-* %d개 (%s, 새로 쓴 것 %d, 지운 것 %d)' % (len(want), dst, n_add, n_del))
-else:
-    print('명령어: /claude-brain-* %d개 제거' % n_del)
-PY
+# 2b. 명령어 - <설정 폴더>/commands/claude-brain-*.md. 저장소 commands/ 템플릿의 {{BRAIN}}, {{DESC}}, {{HINT}} 를 이 설치 경로와
+# brain 언어로 채운다. 자동완성에 /claude-brain-status 처럼 하나씩 뜬다. 표식 줄(brain:command)이 있는 파일만 이 스크립트 것으로 보고 고치거나 지운다.
+# 위치를 .active/commands-dir 에 남긴다 - 언어를 바꾸면(config.sh lang) 설명을 그 언어로 다시 쓴다.
+nw_py "$BRAIN/scripts/cli_i18n.py" commands "$(nw_tool_path "$BRAIN/commands")" "$(nw_tool_path "$CFG/commands")" "$(nw_tool_path "$BRAIN")" "$MODE" || nw_say in_cmd_fail
+if [ "$MODE" = install ]; then nw_tool_path "$CFG/commands" > "$BRAIN/.active/commands-dir"; else rm -f "$BRAIN/.active/commands-dir"; fi
 
 # 3. 밤 잠 예약
 # 예약 이름은 기기 하나에 하나다 - 기본 설정 폴더(~/.claude)가 아니면 폴더별 꼬리표를 붙여 다른 설치의 예약을 덮거나 지우지 않는다
@@ -172,7 +178,7 @@ if [ "$(uname)" = "Darwin" ]; then
     mkdir -p "$HOME/Library/LaunchAgents"
     P="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     # plistlib 로 채운다 - 경로에 &, #, 따옴표가 있어도 깨지지 않는다. 설정 폴더를 바꿔 쓰는 기기면 밤 잠도 같은 폴더를 보게 넘긴다.
-    nw_py - "$BRAIN/scripts/brain.sleep.plist" "$PL" "$BRAIN" "$P" "$LABEL" "${CLAUDE_CONFIG_DIR:+$CFG}" <<'PY' || { echo "경고: 잠 예약 파일을 만들지 못했다 - 훅과 기억은 정상"; exit 0; }
+    nw_py - "$BRAIN/scripts/brain.sleep.plist" "$PL" "$BRAIN" "$P" "$LABEL" "${CLAUDE_CONFIG_DIR:+$CFG}" <<'PY' || { nw_say in_plist_fail; nw_say in_done; exit 0; }
 import plistlib, sys
 tpl, out, brain, path, label, cfg = sys.argv[1:7]
 d = plistlib.loads(open(tpl, 'rb').read())
@@ -200,9 +206,9 @@ PY
       if launchctl bootstrap "gui/$(id -u)" "$PL" 2>/dev/null; then ok=1; break; fi
       sleep 1
     done
-    if [ "$ok" = 1 ]; then echo "잠 예약: 매일 04:30 ($PL)"; else echo "경고: 잠 예약(launchctl bootstrap)이 실패했다 - 훅과 기억은 정상. 나중에 install.sh 를 다시 돌리거나 launchctl bootstrap gui/$(id -u) $PL"; fi
+    if [ "$ok" = 1 ]; then nw_say in_sleep_on "$PL"; else nw_say in_sleep_fail "$(id -u)" "$PL"; fi
   elif [ "$MODE" = "uninstall" ]; then
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null; rm -f "$PL"; echo "잠 예약 해제"
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null; rm -f "$PL"; nw_say in_sleep_off
   fi
 elif [ "$NW_WIN" = 1 ]; then
   # Windows - 작업 스케줄러에 매일 04:30 으로 건다. Git Bash 의 경로 변환이 /Create 같은 인자를 망가뜨리지 않게 끈다
@@ -210,15 +216,15 @@ elif [ "$NW_WIN" = 1 ]; then
     BASHW="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash)"
     SLEEPW="$(nw_tool_path "$BRAIN/scripts/sleep.sh")"
     if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks /Create /F /SC DAILY /ST 04:30 /TN "$TN" /TR "\"$BASHW\" -l \"$SLEEPW\"" >/dev/null 2>&1; then
-      echo "잠 예약: 매일 04:30 (작업 스케줄러 $TN)"
+      nw_say in_sleep_win "$TN"
     else
-      echo "경고: 작업 스케줄러 등록이 실패했다 - 훅과 기억은 정상. 잠은 /claude-brain-sleep 으로 손으로 돌릴 수 있다"
+      nw_say in_sleep_win_fail
     fi
   elif [ "$MODE" = "uninstall" ]; then
-    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks /Delete /F /TN "$TN" >/dev/null 2>&1 && echo "잠 예약 해제"
+    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' schtasks /Delete /F /TN "$TN" >/dev/null 2>&1 && nw_say in_sleep_off
   fi
 else
-  [ "$MODE" = "install" ] && echo "잠 예약: 자동 등록은 macOS, Windows 만 한다 - 하루 한 번 bash $BRAIN/scripts/sleep.sh 를 부르도록 cron 등에 건다"
+  [ "$MODE" = "install" ] && nw_say in_sleep_other "$BRAIN/scripts/sleep.sh"
 fi
 
 # 4. 해제면 해마도 멈춘다 - 지금 항목이 끝나면 선다. 남은 큐는 지우지 않는다(다시 설치하면 이어서 돈다).
@@ -226,9 +232,10 @@ if [ "$MODE" = "uninstall" ]; then
   C="$BRAIN/cortex/.hippocampus"
   nq="$(ls "$C/queue"/*.json 2>/dev/null | wc -l | tr -d ' ')"
   if nw_pid_is "$(cat "$C/lock/pid" 2>/dev/null)" hippocampus-daemon; then
-    touch "$C/stop"; echo "해마: 지금 항목이 끝나면 멈춘다(남은 큐 ${nq}건은 두었다)"
+    touch "$C/stop"; nw_say in_hippo_stop "$nq"
   elif [ "$nq" != "0" ]; then
-    echo "해마: 실행 중 아님(남은 큐 ${nq}건은 두었다)"
+    nw_say in_hippo_idle "$nq"
   fi
 fi
+if [ "$MODE" = install ]; then nw_say in_done; else nw_say in_undone "$(nw_tool_path "$BRAIN/cortex")"; fi
 exit 0

@@ -3,22 +3,9 @@
 __pycache__/
 *.pyc
 
-# cortex 는 설치한 기기에서 자란다 - 시드 골격만 추적하고 누적 기억은 로컬에 남긴다
-cortex/projects/*
-!cortex/projects/.gitkeep
-cortex/stacks/*
-!cortex/stacks/.gitkeep
-cortex/common/lessons/*
-!cortex/common/lessons/.gitkeep
-cortex/common/scripts/*
-!cortex/common/scripts/INDEX.md
-# 기억이 늘면 hippocampus 가 만드는 파일 - 시드에는 없다
-cortex/common/lessons-index-*.md
-cortex/common/dormant.md
-cortex/common/_archive/
-
-# hippocampus 큐 데몬의 런타임 상태(큐, 잠금, 로그, 기억 강도, 잠 상태) - 기기 로컬
-cortex/.hippocampus/
+# cortex 는 설치한 기기에서 자라는 사용자 기억이다 - git 이 추적하지 않는다(업데이트, checkout, reset 이 기억을 건드리지 않게).
+# 처음 골격은 seed/cortex 에 있고 install.sh 가 없는 파일만 채운다. 해마 런타임 상태(cortex/.hippocampus)도 여기 들어간다.
+/cortex/
 
 # 작업용 사본 - 개인 기억이 들어 있어 공개하지 않는다
 tmp-cx/
