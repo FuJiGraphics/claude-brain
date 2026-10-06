@@ -40,6 +40,7 @@ import plat  # noqa: E402  OS 차이(경로, bash, 프로세스) - macOS, Linux,
 import persona  # noqa: E402
 import cli_i18n  # noqa: E402  사람이 읽는 오류 글
 import usage  # noqa: E402  claude -p 사용량 기록
+import recall_stats  # noqa: E402  떠올림 기록 집계 - 밤 잠과 같은 정의
 
 
 def E(key, *args):
@@ -110,8 +111,32 @@ def registry():
     return rows
 
 
+_STATS = {'sig': None, 'data': None}
+
+
+def stats():
+    """[기억 강도와 적중] 떠올림 기록(.active/recall.log)을 바로 센다
+    - 밤 잠이 쓰는 strength.json 은 잠을 거른 밤(맥이 꺼져 있던 밤)이 있으면 낡아서, 새 프로젝트의 활용도가 0 으로 보였다
+    - 기록이 바뀌었을 때만 다시 센다. 떠올림 기록이 없으면(데모 뇌) strength.json 으로
+    """
+    log = os.path.join(ACTIVE, 'recall.log')
+    if not os.path.isfile(log):
+        return {'memories': (_json(os.path.join(HC, 'strength.json'), {}) or {}).get('memories') or {}, 'hits': {}}
+    cut = (datetime.date.today() - datetime.timedelta(days=14)).isoformat()
+    sig = [cut]
+    for p in [log] + glob.glob(os.path.join(ACTIVE, '*.checks.log')) + glob.glob(os.path.join(ACTIVE, 'legacy', '*.checks.log')):
+        try:
+            sig.append((p, os.path.getsize(p), os.path.getmtime(p)))
+        except OSError:
+            pass
+    if _STATS['sig'] != sig:
+        _STATS['data'] = recall_stats.collect(CX, ACTIVE, cut)
+        _STATS['sig'] = sig
+    return _STATS['data']
+
+
 def strength():
-    return (_json(os.path.join(HC, 'strength.json'), {}) or {}).get('memories') or {}
+    return stats()['memories']
 
 
 def is_index_name(f):
@@ -319,6 +344,11 @@ def summarize(layer, slug=None, hp=None, cfg=None):
     if d['has_strength'] and mems:
         cut = (datetime.date.today() - datetime.timedelta(days=14)).isoformat()
         usage = round(sum(1 for m in mems if m['last'] and m['last'] >= cut) / float(len(mems)), 3)
+    # 적중률: 최근 14일 떠오른 기억을 같은 세션이 그 뒤 열어 본 비율 - 요지만 보고 충분하면 안 열고, 열어 보고 무관할 수도 있어 정확도 그 자체는 아니다
+    hits = stats()['hits']
+    hn = sum(hits[m['path']][0] for m in mems if m['path'] in hits)
+    ho = sum(hits[m['path']][1] for m in mems if m['path'] in hits)
+    hit = {'n': hn, 'opened': ho, 'rate': round(ho / float(hn), 3)} if hn else None
     hp = hp or hippo()
     cfg = cfg or config()
     busy = any(q.get('slug') == slug for q in hp['queue']) if slug else False
@@ -345,7 +375,7 @@ def summarize(layer, slug=None, hp=None, cfg=None):
     else:
         mood = 'happy'
     return {'layer': layer, 'count': len(mems), 'regions': regions, 'capacity': round(cap, 3), 'capacity_parts': parts[:8],
-            'index_chars': total_chars, 'learned_week': len(week), 'last_learn': last_learn, 'usage': usage,
+            'index_chars': total_chars, 'learned_week': len(week), 'last_learn': last_learn, 'usage': usage, 'hit': hit,
             'dormant': len(d['dormant']), 'stage': stage_of(len(mems)),
             'mood': {'key': mood, 'n': len(recent_fail)}, 'busy': busy}
 

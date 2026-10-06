@@ -537,6 +537,7 @@ async function pageProject(layer, alive, openWhat) {
       <div class="stat" data-tip="${esc(t('stat.count.tip'))}"><div class="k">${t('stat.count')}</div><div class="v">${num(d.count)}</div></div>
       <div class="stat" data-tip="${esc(t('stat.week.tip'))}"><div class="k">${t('stat.week')}</div><div class="v">+${num(d.learned_week)}</div></div>
       <div class="stat" data-tip="${esc(t(d.usage == null ? 'stat.usage.tip.wait' : 'stat.usage.tip'))}"><div class="k">${t('stat.usage')}</div><div class="v">${d.usage == null ? `<small>${t('stat.usage.wait')}</small>` : pct(d.usage)}</div></div>
+      <div class="stat" data-tip="${esc(d.hit ? tp('stat.hit.tip', { n: d.hit.n, o: d.hit.opened }) : tp('stat.hit.tip.wait'))}"><div class="k">${t('stat.hit')}</div><div class="v">${d.hit ? pct(d.hit.rate) : `<small>${t('stat.hit.wait')}</small>`}</div></div>
     </div>
     <button class="weight card" id="weightBtn" data-tip="${esc(t(wkey))}">
       <div class="row"><span>${t('weight')}</span><span style="color:${d.capacity > 1 ? 'var(--bad)' : 'inherit'}">${pct(d.capacity)}</span></div>

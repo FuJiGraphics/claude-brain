@@ -24,6 +24,7 @@
       세션당 주입 평균 약 2,000자(상한 SESSION_CHARS). 모델은 CLAUDE.md 의 한 줄('[기억] 은 너의 장기 기억')이 있어야
       이 문구를 믿고 쓴다 - 없으면 출처 불명 삽입으로 보고 무시했다(같은 날 실측).
 """
+import collections
 import json
 import os
 import re
@@ -643,6 +644,51 @@ def classify(d):
     return None, None, None, None, None
 
 
+MD_TOKEN_RE = re.compile(r'[^\s\'"`|;&<>()]+\.md\b')
+DIR_TOKEN_RE = re.compile(r'[^\s\'"`|;&<>()=]*/cortex(?:/[^\s\'"`|;&<>()]*)?')
+
+
+def cortex_opens(cmd):
+    """[명령이 연 기억 본문 → cortex 상대 경로들]
+    - 세션은 기억을 Read 보다 cat, sed, head, grep 으로 연다(2026-10-07 대화록 실측: Read 0건, 명령 수백 건). Read 만 세면 열람이 늘 0 이다
+    - 명령에 이 cortex 경로가 있을 때만 본다. 본문 이름은 `$C/x.md` 처럼 변수를 거치거나 `cd <cortex 아래> && cat x.md` 처럼 이름만 오기도 해서
+      cortex 경로 그대로 → 명령에 나온 cortex 폴더들 아래 → cortex 에 하나뿐인 이름 순으로 찾는다
+    """
+    marks = (CX, os.path.realpath(CX), os.path.basename(BRAIN) + '/cortex')
+    if not any(m in cmd for m in marks):
+        return []
+    dirs = ['']
+    for tok in DIR_TOKEN_RE.findall(cmd):
+        m = re.search(r'/cortex((?:/[^/]+)*?)/?$', tok)
+        if m and m.group(1).strip('/') not in dirs and os.path.isdir(os.path.join(CX, m.group(1).strip('/'))):
+            dirs.append(m.group(1).strip('/'))
+    dirs.sort(key=len, reverse=True)   # `$C/x.md` 의 C 는 모른다 - 깊은 폴더부터 맞춰 본다
+    base = None
+    out = []
+    for tok in MD_TOKEN_RE.findall(cmd):
+        if any(c in tok for c in '*?['):
+            continue
+        rel = None
+        m = re.search(r'/cortex/(.+)$', tok)
+        if m:
+            rel = m.group(1) if os.path.isfile(os.path.join(CX, m.group(1))) else None
+        else:
+            name = re.sub(r'^(?:\$\{?\w+\}?/|\./)', '', tok)
+            rel = next((os.path.normpath(os.path.join(d, name)) for d in dirs if os.path.isfile(os.path.join(CX, d, name))), None)
+            if rel is None and '/' not in name:
+                if base is None:
+                    base = collections.defaultdict(list)
+                    for dp, dn, fn in os.walk(CX):
+                        dn[:] = [x for x in dn if x not in ('_archive', '.hippocampus', 'scripts')]
+                        for f in fn:
+                            base[f].append(os.path.relpath(os.path.join(dp, f), CX))
+                cand = base.get(name, [])
+                rel = cand[0] if len(cand) == 1 else None
+        if rel and rel not in out:
+            out.append(rel)
+    return out
+
+
 # 조사 습관 - 지도는 세션 시작 때 한 번이라 계획할 즈음엔 멀어지고, 모델은 필요가 안 보이면 색인을 열지 않는다(정보만으로는 부족했다).
 # 그래서 요청마다 짧게 싣는다. 근거(2026-09-29 A/B 3차, 20과제 x 판정관 3): 이 문장이 있으면 계획에 반영한 정답 기억 1.42 -> 1.82
 # (옛 구조 1.90 과 차이 없음, t=-0.36), 틀린 주장 0.28 -> 0.13. 그때는 시스템 프롬프트로 넣었다 - 훅 전달은 4차에서 잰다.
@@ -930,6 +976,9 @@ def hook():
     kind, text, path, new, old = classify(d)
     if kind is None:
         return 0
+    if kind == 'bash':
+        for rel in cortex_opens(text):
+            log({'t': int(t0), 'sid': sid, 'ev': 'open', 'body': rel})
     if kind in ('read', 'edit') and path:
         rp = os.path.realpath(path)
         if under(os.path.realpath(CX), rp) or under(CX, path):
