@@ -159,6 +159,7 @@ Most of them are handled by the hook directly and use no tokens. Output follows 
 | `/claude-brain-stop` | Stop the hippocampus after its current job |
 | `/claude-brain-update` | Get the new version (memories stay untouched) |
 | `/claude-brain-backup` | Back up memories and personas into one zip |
+| `/claude-brain-run-bench [low\|medium\|high] [recall\|encode]` | Run the recall and encoding benches in a clean environment; the report goes to the Desktop (tens of minutes) |
 
 ## Cost and privacy
 
@@ -293,6 +294,8 @@ The hooks run on SessionStart, UserPromptSubmit, PreToolUse (Edit, Write, MultiE
 | Conditions | 4,000 bytes or more and salience 6 or more (3 or more before compaction and at end of session). Once per 20 minutes per transcript (not limited before compaction or at end of session), 4 per hour overall | Salience 6 or more, top 4 |
 
 Salience: user correction 3, decision wording 3, request to remember 5, permission denial 2, tool failure 1 (up to 5), repeated investigation 1 (up to 3), and 1 when there are 5 or more requests. Corrections, decisions and requests to remember are recognized in English, Korean, Japanese and Chinese.
+
+A session can mark anything worth remembering from what it went through with `remember.sh --mark "<text>"` (the session-start legend mentions it). Marks live in the transcript, so they move with the replay position, and a segment with a mark is handed to the hippocampus regardless of its score. For every failed command (including failures hidden by `| tail`), the replay digest attaches cues pulled from the error (error codes, quoted names, files) and notes when the same command later finished without an error. With these the hippocampus writes findings and pitfalls in short fields (symptom, cause, fix, anchor, evidence) and puts the symptoms a later session will see into the index line.
 
 Each night, sleep runs these steps in order: usage and failed-search counts, forgetting, replaying leftover stretches (up to 4) and registering one active unregistered project, failed-search learning, tidying the 3 slices left longest, and a check. To change the defaults, create `scripts/sleep.conf` with lines such as `FORGET_DAYS=60`.
 
