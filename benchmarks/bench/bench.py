@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 """brain 벤치 - 매번 깨끗한 환경에서 같은 과제를 brain 없이, 지금 brain 으로(깊이 high 면 비교 기준 brain 도) 실제 claude 세션으로 돌려 비교한다.
 
-사용: python3 bench.py [low|medium|high] [--ref <git ref>] [--models haiku,sonnet,opus] [--reps 2] [--jobs 4] [--out <폴더>] [--keep]
-  low     과제 2개(기억 과제 gen-rates, 대조 과제 format-cents) x 갈래 2(brain 끔, 지금 brain) x 모델 3 x 2회 = 24회
-  medium  과제 3개(split-bill 추가) x 갈래 2 x 모델 3 x 2회 = 36회
-  high    과제 3개 x 갈래 3(비교 기준 brain 추가) x 모델 3 x 2회 = 54회. 기준은 --ref, 없으면 scripts/ 에 커밋 안 한 변경이
-          있을 때 HEAD, 없을 때 HEAD~1
+사용: python3 bench.py [low|medium|high] [recall|encode] [--ref <git ref>] [--models haiku,sonnet,opus] [--reps 2] [--jobs 4] [--out <폴더>] [--keep]
+  묶음을 안 주면 둘 다 돈다. recall = 떠올림 벤치(아래), encode = 저장 벤치(encode.py, 사전 등록 encode/README.md)
+  low     떠올림: 과제 2개(기억 과제 gen-rates, 대조 과제 format-cents) x 갈래 2(brain 끔, 지금 brain) x 모델 3 x 2회 = 24회
+          저장: 시나리오 2개(incident, noise) x 해마 모델 3 x 2회, 갈래 옛 저장/새 저장, 시험 세션 sonnet
+  medium  떠올림: 과제 4개(split-bill, 낡은 기억 stale-memory 추가) x 갈래 2 x 모델 3 x 2회 = 48회
+          저장: 시나리오 4개, 갈래에 표시 뺀 새 저장 추가, 시험 세션 모델 3
+  high    medium + 떠올림에 비교 기준 brain 갈래. 기준은 --ref, 없으면 scripts/ 에 커밋 안 한 변경이 있을 때 HEAD, 없을 때 HEAD~1
 
 공정성과 투명성 - 보고서에 그대로 싣는다
 - 같은 입력: 갈래끼리 픽스처(fixture/project, fixture/cortex), 과제 글, 모델, 턴 상한, 도구, 덧붙이는 시스템 문구가 같다.
@@ -41,8 +43,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 FIX_PROJECT = os.path.join(HERE, 'fixture', 'project')
 FIX_CORTEX = os.path.join(HERE, 'fixture', 'cortex')
 SLUG = 'ledger'
-DEPTH_TASKS = {'low': ['gen-rates', 'format-cents'], 'medium': ['gen-rates', 'split-bill', 'format-cents'],
-               'high': ['gen-rates', 'split-bill', 'format-cents']}
+DEPTH_TASKS = {'low': ['gen-rates', 'format-cents'], 'medium': ['gen-rates', 'split-bill', 'format-cents', 'stale-memory'],
+               'high': ['gen-rates', 'split-bill', 'format-cents', 'stale-memory']}
 RUN_TIMEOUT = 900         # 실행 하나의 시간 상한(초)
 BUDGET_USD = 2.0          # 실행 하나의 비용 상한(claude --max-budget-usd)
 TOOLS = 'Bash,Read,Edit,Write,Glob,Grep'
@@ -80,18 +82,18 @@ def hook_events(scripts_dir):
 
 
 def prepare_arm(name, tmp, ref=None):
-    """[갈래의 brain 코드] 지금 저장소의 scripts/ 또는 git ref 의 scripts/ 를 임시 폴더에 둔다"""
+    """[갈래의 brain 코드] 지금 저장소의 scripts/, agents/ 또는 git ref 의 것을 임시 폴더에 둔다(agents 는 저장 벤치의 해마 지침)"""
     dst = os.path.join(tmp, 'arms', name)
     os.makedirs(dst)
     if ref:
-        arc = subprocess.run(['git', '-C', REPO, 'archive', ref, 'scripts'], capture_output=True, check=True).stdout
+        arc = subprocess.run(['git', '-C', REPO, 'archive', ref, 'scripts', 'agents'], capture_output=True, check=True).stdout
         subprocess.run(['tar', '-x', '-C', dst], input=arc, check=True)
         commit = sh(['git', '-C', REPO, 'rev-parse', '--short', ref])
     else:
-        shutil.copytree(os.path.join(REPO, 'scripts'), os.path.join(dst, 'scripts'),
-                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        for d in ('scripts', 'agents'):
+            shutil.copytree(os.path.join(REPO, d), os.path.join(dst, d), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         commit = sh(['git', '-C', REPO, 'rev-parse', '--short', 'HEAD'])
-        if sh(['git', '-C', REPO, 'status', '--porcelain', '--', 'scripts']):
+        if sh(['git', '-C', REPO, 'status', '--porcelain', '--', 'scripts', 'agents']):
             commit += '+작업트리'
     return {'name': name, 'dir': dst, 'commit': commit, 'hash': tree_hash(os.path.join(dst, 'scripts')),
             'events': hook_events(os.path.join(dst, 'scripts'))}
@@ -103,12 +105,45 @@ def claude_md_line():
     return lang.T[lang.current()]['claude_md']
 
 
+def fill_registry(cortex, ws_list):
+    """[기억 저장소의 registry 에 작업 폴더를 ledger 프로젝트로 등록] 픽스처 registry 의 {{ROWS}} 자리"""
+    reg = os.path.join(cortex, 'registry.md')
+    rows = '\n'.join('| %s | %s | python | 3 | 가계부 정산 도구(정수 센트, 환율 표는 생성 파일). |' % (w, SLUG) for w in ws_list)
+    text = open(reg, encoding='utf-8').read().replace('{{ROWS}}', rows)
+    open(reg, 'w', encoding='utf-8').write(text)
+
+
+def patch_cortex(cortex, patch):
+    """[과제의 기억 패치] 기억 파일 빼기(색인 줄도), 더하기, 색인 줄 더하기 - 낡은 기억 과제가 쓴다"""
+    for rel in patch.get('remove') or []:
+        os.remove(os.path.join(cortex, rel))
+        base = os.path.basename(rel)
+        for dp, dn, fn in os.walk(cortex):
+            for f in fn:
+                if 'index' in f.lower() and f.endswith('.md'):
+                    ix = os.path.join(dp, f)
+                    lines = open(ix, encoding='utf-8').read().splitlines(True)
+                    kept = [l for l in lines if base not in l]
+                    if len(kept) != len(lines):
+                        open(ix, 'w', encoding='utf-8').writelines(kept)
+    for rel, src in (patch.get('add') or {}).items():
+        shutil.copyfile(os.path.join(HERE, src), os.path.join(cortex, rel))
+    for rel, line in (patch.get('index_line') or {}).items():
+        with open(os.path.join(cortex, rel), 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+
+
 def setup_run(run, tmp):
-    """[실행 하나의 새 환경] 프로젝트 복사 + git, brain 갈래면 brain 사본과 훅 설정"""
+    """[실행 하나의 새 환경] 프로젝트 복사 + git, brain 갈래면 brain 사본과 훅 설정
+    - run['cortex']: 픽스처 대신 쓸 기억 저장소 폴더(저장 벤치가 해마가 쓴 결과를 넘긴다). 과제의 cortex_patch 는 그 위에 적용한다
+    - 과제의 files: 시작 파일 덮어쓰기(git 첫 커밋 전에), setup: 시작 명령(커밋 뒤)
+    """
     base = os.path.join(tmp, 'runs', run['id'])
     ws = os.path.join(base, 'ledger')
     shutil.copytree(FIX_PROJECT, ws)
     ws = os.path.realpath(ws)
+    for dst, src in (run['task'].get('files') or {}).items():
+        shutil.copyfile(os.path.join(HERE, src), os.path.join(ws, dst))
     env = dict(os.environ, GIT_AUTHOR_NAME='bench', GIT_AUTHOR_EMAIL='bench@localhost',
                GIT_COMMITTER_NAME='bench', GIT_COMMITTER_EMAIL='bench@localhost')
     for args in (['git', 'init', '-q'], ['git', 'add', '-A'], ['git', 'commit', '-q', '-m', 'init']):
@@ -121,11 +156,10 @@ def setup_run(run, tmp):
         arm = run['arm_info']
         brain = os.path.join(base, 'brain')
         shutil.copytree(os.path.join(arm['dir'], 'scripts'), os.path.join(brain, 'scripts'))
-        shutil.copytree(FIX_CORTEX, os.path.join(brain, 'cortex'))
-        reg = os.path.join(brain, 'cortex', 'registry.md')
-        rows = '| %s | %s | python | 3 | 가계부 정산 도구(정수 센트, 환율 표는 생성 파일). |' % (ws, SLUG)
-        text = open(reg, encoding='utf-8').read().replace('{{ROWS}}', rows)
-        open(reg, 'w', encoding='utf-8').write(text)
+        shutil.copytree(run.get('cortex') or FIX_CORTEX, os.path.join(brain, 'cortex'))
+        if run['task'].get('cortex_patch'):
+            patch_cortex(os.path.join(brain, 'cortex'), run['task']['cortex_patch'])
+        fill_registry(os.path.join(brain, 'cortex'), [ws])
         os.makedirs(os.path.join(brain, '.active'))
         cmd = 'f=%s; [ -f "$f" ] && %s "$f" hook; exit 0' % (shlex_quote(os.path.join(brain, 'scripts', 'thalamus.py')), sys.executable)
         for ev, matcher in arm['events']:
@@ -149,14 +183,21 @@ def encoded_project_dir(ws):
 
 
 def run_one(run, tmp, sysline):
+    """[실행 하나] run: task, arm, arm_info, model, rep, id. 선택: cortex(기억 저장소 폴더), key(핵심 기억 이름 바꿔 끼우기),
+    persist(세션 저장 - 저장 벤치의 배우는 세션이 대화록을 넘겨야 한다. 끝나면 대화록을 꺼내고 ~/.claude/projects 의 흔적을 지운다),
+    no_check(채점 없음)
+    """
     t0 = time.time()
     rec = {'id': run['id'], 'task': run['task']['id'], 'arm': run['arm'], 'model': run['model'], 'rep': run['rep']}
     try:
         ws, brain, sp, base = setup_run(run, tmp)
+        rec['ws'] = ws
         args = ['claude', '-p', run['task']['prompt'], '--model', run['model'], '--setting-sources', 'project,local',
-                '--strict-mcp-config', '--no-session-persistence', '--settings', sp, '--output-format', 'stream-json',
+                '--strict-mcp-config', '--settings', sp, '--output-format', 'stream-json',
                 '--verbose', '--append-system-prompt', sysline, '--permission-mode', 'acceptEdits', '--allowedTools', TOOLS,
                 '--max-turns', str(run['task']['max_turns']), '--max-budget-usd', str(BUDGET_USD)]
+        if not run.get('persist'):
+            args.insert(args.index('--settings'), '--no-session-persistence')
         env = dict(os.environ)
         for k in ('CLAUDE_CODE_SESSION_ID', 'CLAUDE_PROJECT_DIR'):
             env.pop(k, None)
@@ -169,15 +210,29 @@ def run_one(run, tmp, sysline):
             except subprocess.TimeoutExpired:
                 rec['exit'] = 'timeout'
         parse_stream(out_path, rec)
+        if run.get('persist'):
+            pd = encoded_project_dir(ws)
+            tp = os.path.join(pd, '%s.jsonl' % ((rec.get('init') or {}).get('session_id') or '?'))
+            if os.path.isfile(tp):
+                rec['transcript'] = os.path.join(base, 'transcript.jsonl')
+                shutil.copyfile(tp, rec['transcript'])
+            shutil.rmtree(pd, ignore_errors=True)
         rec['isolation'] = isolation(rec, ws, brain)
-        ck = subprocess.run([sys.executable, os.path.join(HERE, 'checks', run['task']['id'] + '.py'), ws],
-                            capture_output=True, text=True, timeout=300)
-        try:
-            rec['check'] = json.loads(ck.stdout.strip().splitlines()[-1])
-        except (ValueError, IndexError):
-            rec['check'] = {'pass': False, 'checks': [['채점 실패', False, (ck.stderr or ck.stdout)[-300:]]]}
-        rec['pass'] = bool(rec['check'].get('pass'))
-        brain_metrics(rec, brain, run['task'])
+        if run.get('persist') and not rec.get('transcript'):
+            rec['isolation'].append('배우는 세션의 대화록을 찾지 못함')
+        if run.get('no_check'):
+            rec['pass'] = None
+        else:
+            ck = subprocess.run([sys.executable, os.path.join(HERE, 'checks', (run['task'].get('check') or run['task']['id']) + '.py'), ws],
+                                capture_output=True, text=True, timeout=300)
+            try:
+                rec['check'] = json.loads(ck.stdout.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                rec['check'] = {'pass': False, 'checks': [['채점 실패', False, (ck.stderr or ck.stdout)[-300:]]]}
+            rec['pass'] = bool(rec['check'].get('pass'))
+        brain_metrics(rec, brain, dict(run['task'], key=run.get('key', run['task'].get('key') or [])))
+        if rec['pass'] is not False:
+            rec.pop('trace', None)   # 실패한 실행만 도구 호출 순서를 남긴다
     except Exception as e:   # 실행 준비나 분석 실패도 표에 남긴다
         rec['error'] = '%s: %s' % (e.__class__.__name__, e)
         rec['pass'] = False
@@ -187,6 +242,7 @@ def run_one(run, tmp, sysline):
 
 def parse_stream(path, rec):
     tools = {}
+    trace = []
     rec['init'] = {}
     rec['result'] = {}
     for line in open(path, encoding='utf-8', errors='replace'):
@@ -201,6 +257,9 @@ def parse_stream(path, rec):
             for x in (d.get('message') or {}).get('content') or []:
                 if isinstance(x, dict) and x.get('type') == 'tool_use':
                     tools[x.get('name')] = tools.get(x.get('name'), 0) + 1
+                    inp = x.get('input') or {}
+                    tgt = inp.get('command') or inp.get('file_path') or inp.get('pattern') or ''
+                    trace.append('%s %s' % (x.get('name'), ' '.join(str(tgt).split())[:160]))
         elif d.get('type') == 'result':
             u = d.get('usage') or {}
             rec['result'] = {'subtype': d.get('subtype'), 'is_error': d.get('is_error'), 'turns': d.get('num_turns'),
@@ -209,6 +268,7 @@ def parse_stream(path, rec):
                              + (u.get('cache_creation_input_tokens') or 0),
                              'out_tokens': u.get('output_tokens') or 0}
     rec['tools'] = tools
+    rec['trace'] = trace
 
 
 USER_SKILLS = None
@@ -289,6 +349,10 @@ def brain_metrics(rec, brain, task):
     rec['key_shown'] = bool(key & set(s for _, s in rec['shown'])) if key else None
     rec['key_opened'] = bool(key & set(rec['opened'])) if key else None
     rec['noise_shown'] = len([s for _, s in rec['shown'] if s not in key])
+    stale = set(task.get('stale') or [])
+    if stale:   # 낡은 기억 과제 - 낡은 기억이 떠올랐나, 세션이 그것을 열었나
+        rec['stale_shown'] = bool(stale & set(s for _, s in rec['shown']))
+        rec['stale_opened'] = bool(stale & set(rec['opened']))
 
 
 # ---------------------------------------------------------------- 보고서
@@ -301,11 +365,37 @@ def fmt(x, f='%.2f'):
     return '-' if x is None else f % x
 
 
-def report(meta, recs, out_dir):
+KINDS = (('기억 과제(정답이 기억에만 있게 만든 것 - 설계상 brain 에 유리)', lambda t: bool(t.get('key'))),
+         ('대조 과제(기억이 필요 없다 - 차이는 brain 의 부작용)', lambda t: not t.get('key') and not t.get('stale')),
+         ('낡은 기억 과제(기억이 지금 코드와 어긋난다 - brain 이 판단을 비트는지)', lambda t: bool(t.get('stale'))))
+
+
+def report(meta, recs, out_dir, enc=None):
     L = []
-    L.append('# brain 벤치 보고서 (%s, 깊이 %s)' % (meta['started'], meta['depth']))
+    L.append('# brain 벤치 보고서 (%s, 깊이 %s, 묶음 %s)' % (meta['started'], meta['depth'], ', '.join(meta['suites'])))
     L.append('')
-    L.append('## 요약')
+    L.append('## 먼저 읽을 것')
+    L.append('')
+    L.append('- 기억 과제는 정답(사용자 결정)이 기억에만 있게 만든 과제라 brain 갈래에 유리하다. 기억 과제의 통과율 차이를 일반적인 성능 향상으로 읽지 않는다.')
+    L.append('- brain 의 부작용은 대조 과제(비용, 턴 차이)와 낡은 기억 과제(통과율 차이)로 본다. 합계는 과제 종류별로 따로 낸다.')
+    L.append('- 저장 벤치는 같은 대화록을 갈래마다 다르게 저장한 결과를 비교한다. 시나리오와 채점은 구현 전에 커밋했다(encode/README.md).')
+    L.append('- 실패한 실행의 도구 호출 순서는 runs.json 의 trace 에 있다.')
+    L.append('')
+    if recs:
+        L += recall_section(meta, recs)
+    if enc:
+        import encode
+        L += encode.report(enc)
+        L.append('')
+    L += tail_section(meta, recs)
+    path = os.path.join(out_dir, 'report.md')
+    open(path, 'w', encoding='utf-8').write('\n'.join(L) + '\n')
+    return path
+
+
+def recall_section(meta, recs):
+    L = []
+    L.append('## 떠올림 벤치 요약')
     L.append('')
     L.append('| 과제 | 갈래 | 모델 | 통과 | 평균 비용($) | 평균 턴 | 평균 시간(초) | 평균 주입 글자(도구,요청) | 핵심 기억 떠올림 | 핵심 기억 열람 | 핵심 아닌 떠올림(평균) |')
     L.append('|---|---|---|---|---|---|---|---|---|---|---|')
@@ -327,22 +417,40 @@ def report(meta, recs, out_dir):
                     '-' if arm == 'off' or not ko else '%d/%d' % (sum(ko), len(ko)),
                     '-' if arm == 'off' else fmt(mean([r.get('noise_shown') for r in g]), '%.1f')))
     L.append('')
-    L.append('갈래별 합계(유효 실행만):')
+    L.append('과제 종류별, 갈래별 합계(유효 실행만):')
     L.append('')
-    for arm in meta['arms']:
-        g = [r for r in valid if r['arm'] == arm]
-        if g:
-            L.append('- %s: 통과 %d/%d, 비용 합 $%.2f, 평균 턴 %s' % (arm, sum(1 for r in g if r['pass']), len(g),
-                     sum((r.get('result') or {}).get('cost') or 0 for r in g), fmt(mean([(r.get('result') or {}).get('turns') for r in g]), '%.1f')))
+    defs = dict((t['id'], t) for t in meta['task_defs'])
+    for kname, pred in KINDS:
+        ids = [t for t in meta['tasks'] if pred(defs[t])]
+        if not ids:
+            continue
+        L.append('- %s: %s' % (kname, ', '.join(ids)))
+        for arm in meta['arms']:
+            g = [r for r in valid if r['arm'] == arm and r['task'] in ids]
+            if not g:
+                continue
+            extra = ''
+            if any(defs[t].get('stale') for t in ids) and arm != 'off':
+                extra = ', 낡은 기억 떠올림 %d/%d, 열람 %d/%d' % (sum(1 for r in g if r.get('stale_shown')), len(g),
+                                                          sum(1 for r in g if r.get('stale_opened')), len(g))
+            L.append('  - %s: 통과 %d/%d, 비용 합 $%.2f, 평균 턴 %s%s' % (arm, sum(1 for r in g if r['pass']), len(g),
+                     sum((r.get('result') or {}).get('cost') or 0 for r in g), fmt(mean([(r.get('result') or {}).get('turns') for r in g]), '%.1f'), extra))
     inval = [r for r in recs if r.get('isolation') or r.get('error')]
     L.append('- 무효 실행: %d (격리 위반이나 준비 오류 - 아래 전체 표에 이유)' % len(inval))
     L.append('')
+    return L
+
+
+def tail_section(meta, recs):
+    L = []
     L.append('## 한계')
     L.append('')
     L.append('- 표본이 작다(조합마다 %d회). 차이가 작으면 우연일 수 있다 - 방향을 보는 지표다.' % meta['reps'])
     L.append('- 기억 과제(gen-rates, split-bill)의 정답은 사용자 결정이라 기억에만 있다. brain 끔 갈래는 우연히 맞히지 않는 한 통과하지 못하는 것이 설계다 - 이 과제는 "기억이 필요한 순간에 떠오르고 쓰이는가" 를 잰다.')
     L.append('- 대조 과제(format-cents)는 기억이 필요 없다 - 갈래 사이 통과율, 비용, 턴 차이가 brain 의 부작용(판단 흐림, 군더더기 비용)이다.')
+    L.append('- 낡은 기억 과제(stale-memory)는 결정이 과제 글에 있어 brain 없이도 풀린다 - brain 갈래가 더 자주 실패하면 낡은 기억이 판단을 비튼 것이다.')
     L.append('- 픽스처는 작은 Python 프로젝트 하나와 기억 17개다. 실제 저장소(기억 1,300개)보다 헷갈리게 하는 기억이 적다.')
+    L.append('- 저장 벤치의 배우는 세션은 sonnet 하나로 고정하고 같은 대화록을 모든 갈래에 넣는다 - 세션 표시(M)는 그 대화록에 세션이 남긴 만큼만 잰다.')
     L.append('')
     L.append('## 절차')
     L.append('')
@@ -356,6 +464,8 @@ def report(meta, recs, out_dir):
     L.append('- 픽스처 해시: 프로젝트 %s, 기억 %s, 과제 %s, 채점 %s' % (meta['fix_hash'], meta['cortex_hash'], meta['tasks_hash'], meta['checks_hash']))
     L.append('- 순서 시드 %d, 동시 실행 %d, 실행당 상한: 시간 %d초, 비용 $%.1f, 턴은 과제 파일' % (meta['seed'], meta['jobs'], RUN_TIMEOUT, BUDGET_USD))
     L.append('')
+    if not recs:
+        return L
     L.append('## 과제와 채점 기준(미리 정한 것)')
     L.append('')
     for t in meta['task_defs']:
@@ -383,9 +493,7 @@ def report(meta, recs, out_dir):
             res.get('turns', '-'), fmt((res.get('duration_ms') or 0) / 1000.0, '%.0f'), r.get('inject_chars', '-') if r['arm'] != 'off' else '-',
             ', '.join('%s:%s' % (e, s) for e, s in r.get('shown') or []) or '-', ', '.join(r.get('opened') or []) or '-',
             why.replace('|', '/') or '-'))
-    path = os.path.join(out_dir, 'report.md')
-    open(path, 'w', encoding='utf-8').write('\n'.join(L) + '\n')
-    return path
+    return L
 
 
 # ---------------------------------------------------------------- 진입
@@ -397,11 +505,14 @@ def main(argv):
     jobs = 4
     out = os.path.expanduser('~/Desktop')
     keep = False
+    suites = []
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in DEPTH_TASKS:
             depth = a
+        elif a in ('recall', 'encode'):
+            suites.append(a)
         elif a == '--ref':
             ref = argv[i + 1]
             i += 1
@@ -423,6 +534,7 @@ def main(argv):
             print(__doc__)
             return 2
         i += 1
+    suites = suites or ['recall', 'encode']
     if shutil.which('claude') is None:
         print('claude 명령을 찾을 수 없다')
         return 2
@@ -431,14 +543,14 @@ def main(argv):
     out_dir = os.path.join(out, 'brain-bench-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     try:
         arms = [prepare_arm('cur', tmp)]
-        if depth == 'high' or ref:
+        if 'recall' in suites and (depth == 'high' or ref):
             if not ref:
                 ref = 'HEAD' if '+작업트리' in arms[0]['commit'] else 'HEAD~1'
             arms.append(prepare_arm('ref', tmp, ref))
         arm_names = ['off'] + [a['name'] for a in arms]
         task_defs = [json.load(open(os.path.join(HERE, 'tasks', t + '.json'), encoding='utf-8')) for t in DEPTH_TASKS[depth]]
         runs = []
-        for t in task_defs:
+        for t in (task_defs if 'recall' in suites else []):
             for arm in arm_names:
                 for m in models:
                     for rep in range(1, reps + 1):
@@ -448,8 +560,9 @@ def main(argv):
         for n, r in enumerate(runs):
             r['id'] = '%03d-%s-%s-%s-%d' % (n, r['task']['id'], r['arm'], r['model'], r['rep'])
         sysline = claude_md_line()
-        print('brain 벤치: 깊이 %s, 과제 %d, 갈래 %s, 모델 %s, %d회 -> 실행 %d개 (동시 %d)' % (
-            depth, len(task_defs), '/'.join(arm_names), ','.join(models), reps, len(runs), jobs), flush=True)
+        if runs:
+            print('떠올림 벤치: 깊이 %s, 과제 %d, 갈래 %s, 모델 %s, %d회 -> 실행 %d개 (동시 %d)' % (
+                depth, len(task_defs), '/'.join(arm_names), ','.join(models), reps, len(runs), jobs), flush=True)
         recs = []
         with concurrent.futures.ThreadPoolExecutor(jobs) as ex:
             futs = [ex.submit(run_one, r, tmp, sysline) for r in runs]
@@ -460,15 +573,20 @@ def main(argv):
                       '오류' if rec.get('error') else ('무효' if rec.get('isolation') else ('통과' if rec['pass'] else '실패'))), flush=True)
         order = dict((r['id'], n) for n, r in enumerate(runs))
         recs.sort(key=lambda r: order[r['id']])
+        enc = None
+        if 'encode' in suites:
+            import encode
+            enc = encode.run_encode(depth, models, reps, jobs, tmp, sysline, arms[0])
         os.makedirs(out_dir)
-        meta = {'started': started, 'depth': depth, 'tasks': [t['id'] for t in task_defs], 'task_defs': task_defs, 'arms': arm_names,
+        meta = {'started': started, 'depth': depth, 'suites': suites, 'tasks': [t['id'] for t in task_defs], 'task_defs': task_defs, 'arms': arm_names,
                 'arm_info': [dict((k, a[k]) for k in ('name', 'commit', 'hash')) for a in arms], 'models': models, 'reps': reps,
                 'jobs': jobs, 'seed': SEED, 'fix_hash': tree_hash(FIX_PROJECT), 'cortex_hash': tree_hash(FIX_CORTEX),
                 'tasks_hash': tree_hash(os.path.join(HERE, 'tasks')), 'checks_hash': tree_hash(os.path.join(HERE, 'checks')),
                 'claude_version': sh(['claude', '--version'], check=False),
-                'resolved_models': list(set((r.get('init') or {}).get('model') for r in recs if (r.get('init') or {}).get('model')))}
-        json.dump({'meta': meta, 'runs': recs}, open(os.path.join(out_dir, 'runs.json'), 'w'), ensure_ascii=False, indent=1)
-        path = report(meta, recs, out_dir)
+                'resolved_models': list(set((r.get('init') or {}).get('model') for r in recs + ((enc or {}).get('test') or []) + ((enc or {}).get('learn') or [])
+                                            if (r.get('init') or {}).get('model')))}
+        json.dump({'meta': meta, 'runs': recs, 'encode': enc}, open(os.path.join(out_dir, 'runs.json'), 'w'), ensure_ascii=False, indent=1)
+        path = report(meta, recs, out_dir, enc)
         print('보고서: %s' % path)
     finally:
         if keep:

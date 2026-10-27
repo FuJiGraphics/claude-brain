@@ -46,6 +46,9 @@ for p in sys.argv[1:]:
 print(json.dumps({'enabledPlugins': {k: False for k in sorted(on)}}) if on else '')
 PY
 )"
+# 벤치 격리(benchmarks/bench 의 저장 벤치만 쓴다): BRAIN_HC_ISOLATE=1 이면 사용자 설정, 플러그인, 자동 기억, 세션 저장 없이 띄운다 - 해마 호출의 원본은 이 파일 하나다
+SETTINGS_ARG="$PLUGINS_OFF"; ISOLATE=""
+if [ "${BRAIN_HC_ISOLATE:-}" = 1 ]; then SETTINGS_ARG='{"autoMemoryEnabled": false}'; ISOLATE=1; fi
 
 # 잠금. 죽은 잠금은 rm 이 아니라 mv 로 치운다 - 두 데몬이 동시에 죽은 잠금을 발견해도 mv 는 하나만 성공한다.
 acquire() {
@@ -158,7 +161,8 @@ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("project_root",""))
       --name "hippocampus-$id" --model "$MODEL" --effort "$effort" \
       --permission-mode "$PERM_MODE" \
       --tools "Read,Edit,Write,Grep,Glob,Bash,WebFetch,WebSearch" \
-      --disable-slash-commands --append-system-prompt "$brief" ${PLUGINS_OFF:+--settings "$PLUGINS_OFF"} \
+      --disable-slash-commands --append-system-prompt "$brief" ${SETTINGS_ARG:+--settings "$SETTINGS_ARG"} \
+      ${ISOLATE:+--setting-sources project,local --no-session-persistence} \
       --allowedTools "Read" "Edit" "Write" "Grep" "Glob" "Bash(python3 *)" "Bash(python *)" "Bash(py *)" "Bash(ls *)" "Bash(wc *)" "Bash(cat *)" "Bash(sed *)" "Bash(mv *)" "Bash(cp *)" "Bash(mkdir *)" "Bash(date *)" "Bash(git -C * log*)" "Bash(git -C * show*)" "Bash(git -C * rev-parse*)" "Bash(git -C * diff*)" \
       --disallowedTools \
         "Bash(git push*)" "Bash(git commit*)" "Bash(git reset*)" "Bash(git checkout*)" "Bash(git switch*)" "Bash(git stash*)" "Bash(git rebase*)" "Bash(git merge*)" "Bash(git restore*)" "Bash(git clean*)" "Bash(git rm*)" "Bash(git mv*)" "Bash(git add*)" \
