@@ -97,6 +97,26 @@ def _4():
     assert ' E] ' not in text, text
 
 
+@case('세션 표시(remember.sh --mark)는 M 줄로 실리고, 사람 요청이 없는 구간도 요약된다')
+def _5():
+    p = transcript([('bash', ('t1', 'bash ~/.claude/skills/brain/scripts/remember.sh --mark "gen 파일은 half-even 으로 만든다"')),
+                    ('result', ('t1', '[brain-mark] gen 파일은 half-even 으로 만든다', False, '[brain-mark] gen 파일은 half-even 으로 만든다', ''))])
+    r = replay.digest(p, 'ledger', 0, ROOT)
+    assert r is not None, '요청 없는 표시 구간이 None'
+    text, score, n, end = r
+    assert n['표시'] == 1 and ' M] gen 파일은 half-even 으로 만든다' in text, text
+    assert score == 0, score
+
+
+@case('표시는 한 구간에 10개까지')
+def _6():
+    lines = [('user', '진행해')]
+    for k in range(12):
+        lines += [('bash', ('m%d' % k, 'remember.sh --mark x%d' % k)), ('result', ('m%d' % k, '[brain-mark] x%d' % k, False, '[brain-mark] x%d' % k, ''))]
+    text, score, n, end = replay.digest(transcript(lines), 'ledger', 0, ROOT)
+    assert n['표시'] == 10 and text.count(' M] ') == 10, n
+
+
 def main():
     bad = 0
     for name, fn in CASES:

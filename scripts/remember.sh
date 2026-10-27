@@ -2,12 +2,20 @@
 # brain 직접 새기기 - 사용자가 /brain 으로 남기라고 한 것을 hippocampus 큐에 넣고 바로 끝난다(기다리지 않는다).
 # 사용법: remember.sh [--root <프로젝트 루트>] "<무엇을, 왜 - 근거(file:line 또는 사용자 발화)>" [더 있으면 인자를 더]
 # 범위는 현재 폴더(또는 --root)가 속한 registry 프로젝트. 등록 안 된 곳이면 common 후보로 넘긴다(레이어는 해마가 정한다).
+#       remember.sh --mark "<무엇을, 왜, 본 증상>" ...   세션 표시 - 큐에 넣지 않고 표식 줄([brain-mark] 내용)만 출력한다. 표식은 대화록에
+#       남아 다음 재생(replay.py digest)이 M 줄로 해마에게 넘긴다 - 재생 위치, 실패 뒤 되돌리기와 함께 움직이고 세션 id 가 필요 없다.
 set -u
 BRAIN="$(cd "$(dirname "$(printf '%s' "$0" | tr '\\' '/')")/.." && pwd)"
 SKILL_DIR="$BRAIN"
 . "$BRAIN/scripts/_lib.sh"
 nw_need_python
 nw_i18n rm
+if [ "${1:-}" = "--mark" ]; then
+  shift
+  [ $# -ge 1 ] || { nw_say rm_mark_usage; exit 2; }
+  for x in "$@"; do printf '[brain-mark] %s\n' "$(printf '%s' "$x" | tr '\r\n' '  ')"; done
+  exit 0
+fi
 ROOT="$PWD"
 if [ "${1:-}" = "--root" ]; then ROOT="${2:?}"; shift 2; fi
 [ $# -ge 1 ] || { nw_say rm_usage; exit 2; }

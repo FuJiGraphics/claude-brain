@@ -23,7 +23,7 @@ MARK = {'ko': '[기억]', 'en': '[memory]', 'ja': '[記憶]', 'zh': '[记忆]'}
 T = {
     'ko': {
         'full': '(… 전문: %s)',
-        'legend': '지도의 색인 파일(lessons-index-*, gotchas-*, patterns-*, facts*)에 과거에 확인한 함정, 결정, 구조가 모여 있다. 링크는 각 지도 파일이 있는 폴더 기준이다. `%s <낱말>` 은 이 지도 전체에서 그 낱말(키워드, 심볼, 에러 문자열, 증상)이 맞는 색인 줄과 맨 위 기억의 본문만 보여 준다. 떠오른 키워드는 참고용이라 지금 작업과 무관하면 무시해도 된다.',
+        'legend': '지도의 색인 파일(lessons-index-*, gotchas-*, patterns-*, facts*)에 과거에 확인한 함정, 결정, 구조가 모여 있다. 링크는 각 지도 파일이 있는 폴더 기준이다. `%s <낱말>` 은 이 지도 전체에서 그 낱말(키워드, 심볼, 에러 문자열, 증상)이 맞는 색인 줄과 맨 위 기억의 본문만 보여 준다. 떠오른 키워드는 참고용이라 지금 작업과 무관하면 무시해도 된다. 겪은 것 가운데 기억해 둘 만한 것(본 증상, 원인, 결정)은 `%s --mark "<내용>"` 으로 표시할 수 있고, 해마가 다음 정리 때 새긴다.',
         'recall': '[기억] 걸린 기억(키워드): %s - 단서 %s. 펼치기: %s <키워드>',
         'orient': '[기억] 이 폴더는 %s 프로젝트다(%s). [기억] 으로 시작하는 메시지는 이 프로젝트에 대한 장기 기억이다(과거에 확인한 사실, 지금 코드와 다를 수 있다). 기억 저장소: %s',
         'note': '- 요지: %s',
@@ -40,7 +40,7 @@ T = {
     },
     'en': {
         'full': '(… full text: %s)',
-        'legend': 'The map\'s index files (lessons-index-*, gotchas-*, patterns-*, facts*) collect pitfalls, decisions and structure verified in the past. Links are relative to each map file\'s folder. `%s <word>` shows only the index lines across these maps that match the word (keyword, symbol, error string, symptom), plus the text of the top memory. Recalled keywords are for reference only; ignore them if they do not bear on the current task.',
+        'legend': 'The map\'s index files (lessons-index-*, gotchas-*, patterns-*, facts*) collect pitfalls, decisions and structure verified in the past. Links are relative to each map file\'s folder. `%s <word>` shows only the index lines across these maps that match the word (keyword, symbol, error string, symptom), plus the text of the top memory. Recalled keywords are for reference only; ignore them if they do not bear on the current task. Anything worth remembering from what you went through (symptoms seen, causes, decisions) can be marked with `%s --mark "<text>"`; the hippocampus records it at the next consolidation.',
         'recall': '[memory] Matching memories (keywords): %s - cue %s. Expand: %s <keyword>',
         'orient': '[memory] This folder is the %s project (%s). Messages starting with [memory] are long-term memory about this project (facts verified in the past, the current code may differ). Memory store: %s',
         'note': '- Gist: %s',
@@ -57,7 +57,7 @@ T = {
     },
     'ja': {
         'full': '(… 全文: %s)',
-        'legend': 'マップの索引ファイル(lessons-index-*, gotchas-*, patterns-*, facts*)に、過去に確認した落とし穴、決定、構造がまとまっている。リンクは各マップファイルのフォルダ基準。`%s <語>` は、これらのマップ全体からその語(キーワード、シンボル、エラー文字列、症状)に合う索引行と、一番上の記憶の本文だけを表示する。浮かんだキーワードは参考用なので、今の作業に関係なければ無視してよい。',
+        'legend': 'マップの索引ファイル(lessons-index-*, gotchas-*, patterns-*, facts*)に、過去に確認した落とし穴、決定、構造がまとまっている。リンクは各マップファイルのフォルダ基準。`%s <語>` は、これらのマップ全体からその語(キーワード、シンボル、エラー文字列、症状)に合う索引行と、一番上の記憶の本文だけを表示する。浮かんだキーワードは参考用なので、今の作業に関係なければ無視してよい。経験したことのうち覚えておく価値があるもの(見た症状、原因、決定)は `%s --mark "<内容>"` で印を付けられ、海馬が次の整理で記録する。',
         'recall': '[記憶] 引っかかった記憶(キーワード): %s - 手がかり %s。展開: %s <キーワード>',
         'orient': '[記憶] このフォルダは %s プロジェクト(%s)。[記憶] で始まるメッセージはこのプロジェクトの長期記憶(過去に確認した事実で、今のコードと違う場合がある)。記憶の保存先: %s',
         'note': '- 要旨: %s',
@@ -74,7 +74,7 @@ T = {
     },
     'zh': {
         'full': '(… 全文: %s)',
-        'legend': '地图的索引文件(lessons-index-*, gotchas-*, patterns-*, facts*)汇集了过去确认过的陷阱、决定和结构。链接以各地图文件所在文件夹为准。`%s <词>` 只显示这些地图中与该词(关键词、符号、错误字符串、症状)匹配的索引行,以及排在最前的记忆正文。浮现的关键词仅供参考,与当前任务无关时可以忽略。',
+        'legend': '地图的索引文件(lessons-index-*, gotchas-*, patterns-*, facts*)汇集了过去确认过的陷阱、决定和结构。链接以各地图文件所在文件夹为准。`%s <词>` 只显示这些地图中与该词(关键词、符号、错误字符串、症状)匹配的索引行,以及排在最前的记忆正文。浮现的关键词仅供参考,与当前任务无关时可以忽略。经历中值得记住的内容(看到的症状、原因、决定)可以用 `%s --mark "<内容>"` 标记,海马会在下次整理时记录。',
         'recall': '[记忆] 相关记忆(关键词): %s - 线索 %s。展开: %s <关键词>',
         'orient': '[记忆] 这个文件夹是 %s 项目(%s)。以 [记忆] 开头的消息是关于这个项目的长期记忆(过去确认过的事实,可能与当前代码不同)。记忆存储: %s',
         'note': '- 要点: %s',

@@ -675,7 +675,7 @@ TEXT['ko'].update({
     'eq.started': '해마를 깨웠어요 (pid %s) - 로그 %s', 'eq.start_fail': '오류: 해마를 띄우지 못했어요. 큐에는 남아 있어요. 직접 실행: bash %s',
     'eq.perm': '알림: 권한 모드가 %s 라서 기억 쓰기가 거부돼요 (결과는 denied). 되돌리려면 %s 에 bypassPermissions 를 적어 주세요',
     'eq.unset': '미설정', 'eq.badjson': '오류: done 파일을 JSON 으로 읽지 못했어요: %s', 'eq.timeout': '%s초를 기다려도 끝나지 않았어요. 나중에 /claude-brain-status 로 확인해 주세요',
-    'rm.usage': '사용법: remember.sh "<내용과 근거>" ...', 'rm.evidence': '사용자가 /claude-brain-remember 로 직접 남기라고 한 내용',
+    'rm.usage': '사용법: remember.sh "<내용과 근거>" ...', 'rm.mark_usage': '사용법: remember.sh --mark "<무엇을, 왜, 본 증상>"', 'rm.evidence': '사용자가 /claude-brain-remember 로 직접 남기라고 한 내용',
     'rc.usage': '사용법: recall.sh [--root <경로>] <이름>...',
 })
 TEXT['en'].update({
@@ -683,7 +683,7 @@ TEXT['en'].update({
     'eq.started': 'Woke the hippocampus (pid %s) - log %s', 'eq.start_fail': 'Error: could not start the hippocampus. The job stays in the queue. Run it directly: bash %s',
     'eq.perm': 'Note: the permission mode is %s, so memory writes are denied (the result will be denied). To change it, write bypassPermissions to %s',
     'eq.unset': 'not set', 'eq.badjson': 'Error: could not read the done file as JSON: %s', 'eq.timeout': 'Not finished after %s seconds. Check later with /claude-brain-status',
-    'rm.usage': 'Usage: remember.sh "<what and evidence>" ...', 'rm.evidence': 'The user asked brain to remember this directly with /claude-brain-remember',
+    'rm.usage': 'Usage: remember.sh "<what and evidence>" ...', 'rm.mark_usage': 'Usage: remember.sh --mark "<what, why, symptoms seen>"', 'rm.evidence': 'The user asked brain to remember this directly with /claude-brain-remember',
     'rc.usage': 'Usage: recall.sh [--root <path>] <name>...',
 })
 TEXT['ja'].update({
@@ -691,7 +691,7 @@ TEXT['ja'].update({
     'eq.started': '海馬を起こしました (pid %s) - ログ %s', 'eq.start_fail': 'エラー: 海馬を起動できませんでした。キューには残っています。直接実行: bash %s',
     'eq.perm': 'お知らせ: 権限モードが %s なので記憶の書き込みは拒否されます (結果は denied)。戻すには %s に bypassPermissions と書いてください',
     'eq.unset': '未設定', 'eq.badjson': 'エラー: done ファイルを JSON として読めませんでした: %s', 'eq.timeout': '%s 秒待っても終わりませんでした。あとで /claude-brain-status で確認してください',
-    'rm.usage': '使い方: remember.sh "<内容と根拠>" ...', 'rm.evidence': 'ユーザーが /claude-brain-remember で直接覚えるよう頼んだ内容',
+    'rm.usage': '使い方: remember.sh "<内容と根拠>" ...', 'rm.mark_usage': '使い方: remember.sh --mark "<何を、なぜ、見た症状>"', 'rm.evidence': 'ユーザーが /claude-brain-remember で直接覚えるよう頼んだ内容',
     'rc.usage': '使い方: recall.sh [--root <パス>] <名前>...',
 })
 TEXT['zh'].update({
@@ -699,7 +699,7 @@ TEXT['zh'].update({
     'eq.started': '已唤醒海马 (pid %s) - 日志 %s', 'eq.start_fail': '错误: 无法启动海马。任务仍在队列中。直接运行: bash %s',
     'eq.perm': '提示: 权限模式是 %s,写入记忆会被拒绝 (结果为 denied)。要改回请在 %s 中写入 bypassPermissions',
     'eq.unset': '未设置', 'eq.badjson': '错误: 无法把 done 文件读成 JSON: %s', 'eq.timeout': '等待 %s 秒仍未完成。请稍后用 /claude-brain-status 查看',
-    'rm.usage': '用法: remember.sh "<内容和依据>" ...', 'rm.evidence': '用户用 /claude-brain-remember 直接要求记住的内容',
+    'rm.usage': '用法: remember.sh "<内容和依据>" ...', 'rm.mark_usage': '用法: remember.sh --mark "<什么、为什么、看到的症状>"', 'rm.evidence': '用户用 /claude-brain-remember 直接要求记住的内容',
     'rc.usage': '用法: recall.sh [--root <路径>] <名称>...',
 })
 

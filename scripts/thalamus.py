@@ -676,6 +676,11 @@ def recall_cmd():
     return 'bash ' + shlex.quote(plat.norm(os.path.join(HERE, 'recall.sh')))
 
 
+def remember_cmd():
+    """[세션이 겪은 것을 표시할 명령] bash <brain>/scripts/remember.sh (--mark 와 함께 - 대화록에 표식만 남긴다)"""
+    return 'bash ' + shlex.quote(plat.norm(os.path.join(HERE, 'remember.sh')))
+
+
 def render(items):
     """[떠올림 한 줄] 내용 대신 키워드만 건넨다(항목당 약 50자) - 펼칠지는 세션이 정한다"""
     kws = ', '.join('`%s`' % kw for _, kw, _ in items)
@@ -735,7 +740,7 @@ def orient(row):
     if note:
         out.append(L.t('note') % clip(re.sub(r'\s+', ' ', note.replace('**', '')), ORIENT_NOTE))
     full = ORIENT_MODE == 'full'
-    out.append('- ' + L.t('legend') % recall_cmd())
+    out.append('- ' + L.t('legend') % (recall_cmd(), remember_cmd()))
     pm = _map('projects/%s/INDEX.md' % slug, 10 ** 6 if full else ORIENT_INDEX, True)
     if pm:
         out += [L.t('map_project') % ('projects/%s/INDEX.md' % slug), pm]

@@ -12,6 +12,7 @@
   replay.py scan --out <요약 폴더> --reqs <요청 폴더> [--max N] [--min-score S] [--first-days D]
   replay.py digest <jsonl> [--from <바이트>]      요약 한 건을 표준 출력으로(시험용)
 점수 = 정정 3 + 결정 3 + 기억 요청 5 + 거부 2 + 도구 실패(최대 5) + 반복 조사(최대 3) + 요청 5개 이상이면 1(두드러짐 - 편도체 구실).
+세션 표시(remember.sh --mark 의 표식, M 줄)가 있는 구간은 점수와 상관없이 넘긴다 - 겪은 주체가 기억해 둘 만하다고 고른 것이다.
 """
 import glob
 import json
@@ -206,6 +207,9 @@ def err_lines(text, k=3):
 
 
 ERR_WORD_RE = re.compile(r'(?i)error|fail|panic|exception|traceback|✖|✘')
+MARK = '[brain-mark]'   # remember.sh --mark 가 내는 표식 - 세션 표시
+MARK_MAX = 10           # 한 구간에 싣는 표시 수 상한
+MARK_CHARS = 500        # 표시 한 줄의 글자 상한
 
 
 def cue_text(text, root):
@@ -227,7 +231,7 @@ def digest(path, slug='?', start=0, root=None):
     cmds = {}
     failed = {}
     touch = {}
-    n = {'정정': 0, '결정': 0, '기억 요청': 0, '도구 실패': 0, '거부': 0, '반복 조사': 0, '요청': 0}
+    n = {'정정': 0, '결정': 0, '기억 요청': 0, '도구 실패': 0, '거부': 0, '반복 조사': 0, '요청': 0, '표시': 0}
     first = last = None
     last_text = None
     try:
@@ -283,6 +287,12 @@ def digest(path, slug='?', start=0, root=None):
                         flow.append(('E', ts, '%s → %s%s' % (p or '?', one_line(err_lines(rc), 300), cue_text(rc, root))))
                         if cmd:
                             failed[cmd] = len(flow) - 1
+                    elif cmd is not None and MARK in rc:
+                        # 세션 표시(remember.sh --mark) - 세션이 겪은 것 가운데 기억해 둘 만하다고 고른 것. 출력의 표식 줄을 그대로 싣는다
+                        for line in rc.splitlines():
+                            if line.startswith(MARK) and n['표시'] < MARK_MAX:
+                                n['표시'] += 1
+                                flow.append(('M', ts, one_line(line[len(MARK):].strip(), MARK_CHARS)))
                     elif cmd is not None:
                         tur = d.get('toolUseResult')
                         out = thalamus.bash_error_output(cmd, tur if isinstance(tur, dict) else {'stdout': rc})
@@ -336,7 +346,7 @@ def digest(path, slug='?', start=0, root=None):
     fh.close()
     if last_text:
         flow.append(('A', last_text[0], last_text[1]))
-    if n['요청'] == 0:
+    if n['요청'] == 0 and n['표시'] == 0:
         return None
     reps = sorted(((k, v) for k, v in touch.items() if v >= 6), key=lambda kv: -kv[1])[:8]
     n['반복 조사'] = len(reps)
@@ -346,6 +356,7 @@ def digest(path, slug='?', start=0, root=None):
             '프로젝트 %s, %s ~ %s, 원본 %s' % (slug, (first or '')[:16].replace('T', ' '), (last or '')[:16].replace('T', ' '), path),
             '점수 %d (%s)' % (score, ', '.join('%s %d' % (k, v) for k, v in n.items())),
             '표기: U 사람 요청, A 어시스턴트 결론 앞부분, E 도구 실패(종료 코드 0 인데 에러 형식인 출력 포함), D 거부. '
+            'M 세션 표시(세션이 겪은 것 가운데 기억해 둘 만하다고 직접 남긴 것). '
             'E 의 단서는 에러 출력에서 뽑은 오류 코드, 인용된 이름, 파일이다. 괄호 표시는 규칙 기반 추정이라 틀릴 수 있다.']
     if start:
         fr = first_request(path)
@@ -362,7 +373,7 @@ def digest(path, slug='?', start=0, root=None):
     if len(out) > MAX_CHARS:
         keep = set()
         for i, (k, ts, s) in enumerate(flow):
-            if k in ('E', 'D', 'U') or (k == 'A' and EVIDENCE_RE.search(s)):
+            if k in ('E', 'D', 'U', 'M') or (k == 'A' and EVIDENCE_RE.search(s)):
                 keep.add(i)
         size = sum(len(flow[i][2]) + 20 for i in keep)
         if size > MAX_CHARS:   # 그래도 넘으면 근거 없는 사람 요청,결론부터 뺀다
@@ -462,7 +473,7 @@ def awake(a):
     if r is None:
         return 0
     text, score, n, end = r
-    if score < min_score:
+    if score < min_score and not n.get('표시'):   # 세션이 직접 표시한 구간은 점수와 상관없이 넘긴다
         return 0
     sid = arg(a, '--sid') or os.path.splitext(os.path.basename(path))[0]
     rp = write_request(os.path.join(REPLAY_DIR, 'req'), root, slug, stack, sid, path, text, score, 'awake', mk.get('pos', 0), end)
@@ -566,7 +577,7 @@ def scan(a):
                     marks[p] = {'pos': size, 't': mk.get('t', 0)}
                     continue
                 text, score, n, end = r
-                if score < min_score:
+                if score < min_score and not n.get('표시'):
                     marks[p] = {'pos': end, 't': mk.get('t', 0)}
                     continue
                 cand.append((score, mt, p, root, slug, stack, text, mk.get('pos', 0), end))
