@@ -835,15 +835,21 @@ def classify(d):
     if ev == 'PostToolUseFailure' and tool == 'Bash' and not d.get('is_interrupt'):
         return 'error', err_window(d.get('error') or ''), None, None, None
     if ev == 'PostToolUse' and tool == 'Bash':
-        # 종료 코드 0 인데 에러를 낸 명령(`tsc | tail`, `|| true`) - 출력이 에러 형식 표에 맞을 때만. 기억을 여는 명령의 출력(기억 본문)은 뺀다
-        r = d.get('tool_response')
-        cmd = ti.get('command') or ''
-        if not isinstance(r, dict) or r.get('interrupted') or 'recall.sh' in cmd or cortex_opens(cmd) or '/cortex' in cmd:
-            return None, None, None, None, None
-        out = err_window((r.get('stdout') or '') + '\n' + (r.get('stderr') or ''))
-        if is_error_output(out):
+        out = bash_error_output(ti.get('command') or '', d.get('tool_response'))
+        if out:
             return 'error', out, None, None, None
     return None, None, None, None, None
+
+
+def bash_error_output(cmd, r):
+    """[종료 코드 0 인데 에러를 낸 명령의 출력] `tsc | tail`, `|| true` 처럼 실패가 가려진 명령. 에러면 볼 범위의 글, 아니면 ''
+    - 훅(PostToolUse Bash)과 재생 요약(replay.digest)이 같이 쓴다. 출력이 에러 형식 표에 맞을 때만
+    - 기억을 여는 명령(recall.sh, cortex 경로)의 출력은 기억 본문이라 뺀다 - 본문 속 에러 문자열이 다시 에러로 들어가지 않게
+    """
+    if not isinstance(r, dict) or r.get('interrupted') or 'recall.sh' in cmd or '/cortex' in cmd or cortex_opens(cmd):
+        return ''
+    out = err_window((r.get('stdout') or '') + '\n' + (r.get('stderr') or ''))
+    return out if is_error_output(out) else ''
 
 
 MD_TOKEN_RE = re.compile(r'[^\s\'"`|;&<>()]+\.md\b')

@@ -23,6 +23,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import plat  # noqa: E402  경로 비교(macOS, Linux, Windows)
+import thalamus  # noqa: E402  에러 형식 판정과 에러 단서(훅과 같은 규칙) - 읽기만 하는 함수라 부작용이 없다
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRAIN = os.path.dirname(HERE)
@@ -193,12 +194,38 @@ def first_request(path):
 
 
 # ---------------------------------------------------------------- 요약
-def digest(path, slug='?', start=0):
+def err_lines(text, k=3):
+    """[에러 출력에서 보일 줄] 첫 줄과 에러 낱말이 든 줄을 k 개까지 - 빌드 출력은 앞에 진행 줄이 길다"""
+    ls = [l for l in text.splitlines() if l.strip()]
+    if not ls:
+        return ''
+    pick = [ls[0]] + [l for l in ls[1:] if ERR_WORD_RE.search(l)]
+    if len(pick) < k:
+        pick += [l for l in ls[1:] if l not in pick][:k - len(pick)]
+    return ' / '.join(pick[:k])
+
+
+ERR_WORD_RE = re.compile(r'(?i)error|fail|panic|exception|traceback|✖|✘')
+
+
+def cue_text(text, root):
+    """[에러 단서] 훅과 같은 규칙(thalamus.error_cues)으로 뽑은 오류 코드, 인용된 이름, 파일 - 해마가 색인 줄에 남길지 정한다"""
+    exclude = set(x for x in (root or '').split('/') if x)
+    cues = [c for c, _ in thalamus.error_cues(text, exclude, root)][:6]
+    return (' 단서: ' + ', '.join(cues)) if cues else ''
+
+
+def digest(path, slug='?', start=0, root=None):
     """[대화록 구간 요약]
     - start 바이트부터 끝까지. 반환: (요약 markdown, 점수, 세부 수, 끝 바이트) 또는 None(새 사람 요청이 없는 구간)
+    - root(프로젝트 루트)는 에러 단서에서 라이브러리 프레임을 가리는 데 쓴다
+    - E 는 도구 실패와, 종료 코드 0 인데 에러 형식인 Bash 출력(점수에는 넣지 않는다 - 재생 빈도가 그대로이게). 같은 명령이 뒤에
+      에러 없이 끝나면 그 사실만 적는다(해결됐는지는 해마가 판단한다)
     """
     flow = []
     pend = {}
+    cmds = {}
+    failed = {}
     touch = {}
     n = {'정정': 0, '결정': 0, '기억 요청': 0, '도구 실패': 0, '거부': 0, '반복 조사': 0, '요청': 0}
     first = last = None
@@ -237,6 +264,7 @@ def digest(path, slug='?', start=0):
                     if not (isinstance(b, dict) and b.get('type') == 'tool_result'):
                         continue
                     p = pend.pop(b.get('tool_use_id'), None)
+                    cmd = cmds.pop(b.get('tool_use_id'), None)
                     rc = b.get('content')
                     if isinstance(rc, list):
                         rc = '\n'.join(x.get('text', '') for x in rc if isinstance(x, dict))
@@ -252,8 +280,18 @@ def digest(path, slug='?', start=0):
                         flow.append(('D', ts, '거부된 도구 호출: %s' % (p or '?')))
                     elif b.get('is_error'):
                         n['도구 실패'] += 1
-                        errl = [l for l in rc.splitlines() if l.strip()][:3]
-                        flow.append(('E', ts, '%s → %s' % (p or '?', one_line(' / '.join(errl), 300))))
+                        flow.append(('E', ts, '%s → %s%s' % (p or '?', one_line(err_lines(rc), 300), cue_text(rc, root))))
+                        if cmd:
+                            failed[cmd] = len(flow) - 1
+                    elif cmd is not None:
+                        tur = d.get('toolUseResult')
+                        out = thalamus.bash_error_output(cmd, tur if isinstance(tur, dict) else {'stdout': rc})
+                        if out:
+                            flow.append(('E', ts, '%s → (종료 코드 0) %s%s' % (p or '?', one_line(err_lines(out), 300), cue_text(out, root))))
+                            failed[cmd] = len(flow) - 1
+                        elif cmd in failed:
+                            i = failed.pop(cmd)
+                            flow[i] = flow[i][:2] + (flow[i][2] + ' (같은 명령이 %s 에 에러 없이 끝남)' % (ts or '')[11:16],)
                 continue
             if d.get('isMeta') or d.get('isCompactSummary'):
                 continue
@@ -289,6 +327,8 @@ def digest(path, slug='?', start=0):
                     if nm == 'AskUserQuestion':
                         tgt = ' / '.join(q.get('question', '') for q in inp.get('questions') or [] if isinstance(q, dict))
                     pend[b.get('id')] = '%s `%s`' % (nm, one_line(tgt, 160))
+                    if nm == 'Bash':
+                        cmds[b.get('id')] = inp.get('command') or ''
                     if nm in ('Read', 'Grep', 'Glob'):
                         key = inp.get('file_path') or inp.get('path') or inp.get('pattern') or ''
                         if key:
@@ -305,7 +345,8 @@ def digest(path, slug='?', start=0):
     head = ['# 대화록 요약 - %s%s' % (os.path.splitext(os.path.basename(path))[0], ' (구간, %d 바이트부터)' % start if start else ''),
             '프로젝트 %s, %s ~ %s, 원본 %s' % (slug, (first or '')[:16].replace('T', ' '), (last or '')[:16].replace('T', ' '), path),
             '점수 %d (%s)' % (score, ', '.join('%s %d' % (k, v) for k, v in n.items())),
-            '표기: U 사람 요청, A 어시스턴트 결론 앞부분, E 도구 실패, D 거부. 괄호 표시는 규칙 기반 추정이라 틀릴 수 있다.']
+            '표기: U 사람 요청, A 어시스턴트 결론 앞부분, E 도구 실패(종료 코드 0 인데 에러 형식인 출력 포함), D 거부. '
+            'E 의 단서는 에러 출력에서 뽑은 오류 코드, 인용된 이름, 파일이다. 괄호 표시는 규칙 기반 추정이라 틀릴 수 있다.']
     if start:
         fr = first_request(path)
         if fr:
@@ -417,7 +458,7 @@ def awake(a):
     hist = [t for t in jload(AWAKE_LOG, []) if now - t < 3600]
     if len(hist) >= AWAKE_PER_HOUR:
         return 0
-    r = digest(path, slug, mk.get('pos', 0))
+    r = digest(path, slug, mk.get('pos', 0), root)
     if r is None:
         return 0
     text, score, n, end = r
@@ -520,7 +561,7 @@ def scan(a):
                     marks[p] = {'pos': size, 't': mk.get('t', 0)}
                     continue
                 scanned += 1
-                r = digest(p, slug, mk.get('pos', 0))
+                r = digest(p, slug, mk.get('pos', 0), root)
                 if r is None:
                     marks[p] = {'pos': size, 't': mk.get('t', 0)}
                     continue
