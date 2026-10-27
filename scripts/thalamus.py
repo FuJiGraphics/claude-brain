@@ -6,31 +6,30 @@
 훅 등록(~/.claude/settings.json, 명령은 `python3 <brain>/scripts/thalamus.py hook`):
   SessionStart                                        깨어남: 프로젝트 요지, 기억 지도(프로젝트 INDEX), 절차 기억(단계 카드) 줄, recall.sh 로 찾는 법
                                                       compact 면 이미 떠올린 목록도 비운다(압축으로 컨텍스트에서 빠졌다)
-  UserPromptSubmit                                    요청 글로 작업 낱말을 갱신하고, 작업 점수가 문턱(PROMPT_MIN) 이상인 기억 키워드(없으면 출력 없음)
-  PreToolUse  Edit|Write|MultiEdit|NotebookEdit|Bash  고칠 파일, 새로 부르는 API, 명령이 다루는 파일. 계획 파일(plans/*.md)은 단서가 아니라 작업 낱말,
-                                                      recall.sh 명령은 펼친 기억을 열람으로 기록만 한다
+  UserPromptSubmit                                    /claude-brain-* 제어 명령만 처리한다. 요청 글로는 떠올리지 않는다(아래 근거)
+  PreToolUse  Edit|Write|MultiEdit|NotebookEdit|Bash  고칠 파일, 새로 부르는 API, 명령이 다루는 파일. recall.sh 명령은 펼친 기억을 열람으로 기록만 한다
   PostToolUse Read|Bash                               연 파일(기억 저장소 파일이면 열람 기록만 - 기억 강도), 종료 코드 0 인 명령 출력 속 에러(형식 표에 맞을 때만)
   PostToolUseFailure Bash                             언어별 에러 형식 표(ERR_PATTERNS)의 파일, 오류 코드, 인용 식별자, 예외, 프로젝트 안 스택 프레임
-  SubagentStart                                       새 에이전트: 작업 폴더의 프로젝트, '[기억] 은 장기 기억', recall.sh 한 줄. 작업 낱말은 메인 세션 것을 쓴다
+  SubagentStart                                       새 에이전트: 작업 폴더의 프로젝트, '[기억] 은 장기 기억', recall.sh 한 줄
   (성격)                                              persona/<슬러그>.json 이 있으면 SessionStart 에 작업 방식 문장, UserPromptSubmit 에
                                                       상기 한 줄, PreToolUse(AskUserQuestion 포함) 관문, Stop 검증 검사를 더한다(persona.py)
   Stop, PreCompact, SessionEnd                        쉬는 순간: 새로 쌓인 대화록 구간이 두드러지면 깨어 있는 중 재생(replay.py awake)을
                                                       백그라운드로 띄운다 - 해마가 몇 분 안에 새기고, 그 뒤 모든 세션에서 떠오른다
-명령행: thalamus.py probe --cwd <경로> --event <read|edit|bash|error|prompt|orient> [--task <작업 글>] -- <경로 또는 글>
+명령행: thalamus.py probe --cwd <경로> --event <read|edit|bash|error|orient> -- <경로 또는 글>
         thalamus.py scope <경로>   → '루트<TAB>슬러그<TAB>스택' (등록 안 된 곳이면 빈 출력)
 원칙: 걸린 게 없으면 출력 없음. 같은 기억은 세션에 한 번. 명령하지 않고 사실과 출처만(명령형 훅 문구는 모델이
       프롬프트 주입으로 의심한다). 확신이 없으면 건네지 않는다 - 무관한 기억은 판단을 흐린다(정밀도 우선). 어떤 오류도 조용히 통과(exit 0).
 근거(2026-09-29, 과거 대화록 431세션 재생 + Sonnet 판정 371건): 파일 열람 방해 0~3%, 편집 8~20%, 명령이 다루는 파일 10%.
       '안 된다' 결론(75%), CLI 이름(64%)은 글자 일치로 의도를 못 알아봐 떠올리지 않는다. 모델은 CLAUDE.md 의 한 줄
       ('[기억] 은 너의 장기 기억')이 있어야 이 문구를 믿고 쓴다 - 없으면 출처 불명 삽입으로 보고 무시했다(같은 날 실측).
-근거(2026-10-28, 최근 30일 대화록 80세션 재생, 옛 코드 대비): 세션당 주입(도구,요청) 2,687 → 1,031자, 떠올린 것을 세션이 그 뒤 연 비율
-      6.0 → 5.8%, 세션이 연 기억 가운데 미리 떠올린 것 4.8 → 5.2%(옛 세션은 옛 문구를 보고 움직였으므로 옛 코드 쪽으로 기운 지표다).
-      성공한 명령 출력 618건이 에러 형식에 맞았고(대부분 `| grep`, `| tail` 을 붙인 cargo 빌드,테스트 실패) 떠올림은 45건이었다.
-      요청 떠올림(요청 566개, 세션이 그 요청 동안 연 기억 107개 기준): 색인 줄 전체로 맞추면 정밀도가 문턱마다 절반이라
-      제목 부분만 맞춘다, 문턱 5.5 x 최대 2개에서 6건 중 3건(4.5 면 18건 중 4건 - 정밀도를 앞세웠다). 요청 글로 떠올리던 옛 실측(방해 64%)은 요지 240자를 싣던
-      때라, 키워드만 건네는 지금은 높은 문턱으로만 쓴다.
-      통제 벤치(benchmarks/bench, 같은 날, 모델 3 x 과제 3 x 2회): brain 없음 6/18, 옛 코드 18/18, 새 코드 18/18 통과,
-      주입은 옛 코드의 약 절반. 세션은 색인을 통째로 여는 대신 recall.sh 로 키워드를 찾아 그 기억 하나만 열었다
+근거(2026-10-28, 최근 30일 대화록 80세션 재생, 옛 코드 대비): 세션당 주입(도구,요청) 2,687 → 1,063자. 떠올린 것을 세션이 그 뒤 연 비율
+      6.0 → 4.8%, 세션이 연 기억 가운데 미리 떠올린 비율 4.8 → 4.4%(옛 세션은 옛 문구를 보고 움직였으므로 옛 코드 쪽으로 기운 지표다).
+      성공한 명령 출력 618건이 에러 형식에 맞았다(대부분 `| grep`, `| tail` 을 붙인 cargo 빌드,테스트 실패).
+      요청 글로 떠올리기와 요청 낱말로 후보 순위 매기기는 시험한 뒤 걷어 냈다: 요청 566개에서 문턱을 바꿔 가며 정밀도 22~50%(떠올림 6~18건),
+      후보를 빼도 떠올림 270 → 263건으로 결과가 같았다. 이 요청에 무엇이 필요한지, 얼마나 애써 찾을지는 세션이 판단하고
+      recall.sh 로 찾는다 - 훅은 확실한 단서(파일 이름, 오류 코드, 인용된 식별자)만 맡는다.
+      통제 벤치(benchmarks/bench, 모델 3 x 과제 3 x 2회): 통과 brain 없음 6/18, 옛 코드 18/18, 새 코드 17/18(실패 1건은 sonnet 이
+      핵심 기억을 열고도 기본 옵션으로 생성), 주입 평균 434 → 202자. 기억 과제는 정답이 기억에만 있게 만든 것이라 brain 에 유리하다
 """
 import collections
 import json
@@ -50,13 +49,6 @@ LOG = os.path.join(ACTIVE, 'recall.log')
 
 # ---- 조정값 ----
 MAX_ITEMS = {'read': 2, 'edit': 2, 'bash': 1, 'error': 2}
-TASK_WORDS = 40           # 세션의 작업 낱말 상한 - 가중치 x idf 가 큰 것부터 남긴다
-TASK_TEXT = 4000          # 요청 글, 계획 파일에서 낱말을 뽑는 앞부분 - 붙여 넣은 긴 로그가 작업 낱말을 덮지 않게
-TASK_COMMON = 0.2         # 색인 줄의 이 비율보다 많이 나오는 낱말은 작업 낱말로 두지 않는다(무엇이든 걸린다)
-PROMPT_ITEMS = 2          # 요청 글로 떠올릴 키워드 수 상한(K)
-PROMPT_MIN = 5.5          # 요청 떠올림 점수 하한(T) - 드문 낱말 약 5.5개가 제목 부분에 맞은 정도(nbsearch.task_rank 의 단위)
-TASK_BONUS = 2.0          # 도구 사건 후보의 순위에 더하는 작업 점수 - T 마다 이만큼, 최대 2배
-TASK_KEEP = 0.0           # 작업 낱말이 있을 때 read, bash 후보는 작업 점수가 이보다 커야 남는다(기억 파일 이름 일치는 예외)
 ITEM_CHARS = 240          # 지도 줄(단계 카드) 요지의 글자 상한
 DF_MAX = 3                # 단서가 가리키는 서로 다른 기억이 이보다 많으면 흔한 단서 - 파일 이름에 그 단서가 든 기억만 남긴다
 SHORT_ID = 6              # 이보다 짧은 단서는 낱말 경계 일치나 파일 이름 일치만 인정
@@ -163,7 +155,6 @@ ERR_PATTERNS = [
     ('unity', re.compile(r'\(at (?:[\w./-]*/)?(?P<f>[\w-]+\.cs):\d+\)|in [^\n]*?/(?P<f2>[\w-]+\.cs):\d+')),
 ]
 ERR_CHEAP = ('error', 'fail', 'panic', 'traceback', 'exception', '✖', 'not ok', '✘', 'e: ', '.go:')   # 성공한 명령 출력을 싸게 거른다(소문자 비교, Go 컴파일 에러에는 error 낱말이 없다)
-FRAME_RE = re.compile(r'\(at (?:[\w./-]*/)?([\w-]+)\.cs:\d+\)|in [^\n]*?/([\w-]+)\.cs:\d+')
 # 언어별 스택 프레임 - 프로젝트 안 프레임을 고른다(Python 은 마지막, 나머지는 첫 프레임이 에러가 난 곳)
 PY_FRAME_RE = re.compile(r'File "([^"]+)", line \d+')
 JS_FRAME_RE = re.compile(r'(?m)^\s+at (?:[^\n(]+ \()?(?:file://)?([^\s()]+?):\d+:\d+\)?$')
@@ -494,18 +485,10 @@ class Mem(object):
         import nbsearch
         self.ns = nbsearch
         self.ctx = nbsearch.Ctx(CX, slug, stack)
-        self._task = None
-
-    def task_scores(self, task):
-        """[작업 점수] {기억 경로: (점수, 맞은 낱말)} - 작업 낱말로 색인 줄을 채점한다(nbsearch.task_rank). 한 호출에 한 번"""
-        if self._task is None:
-            self._task = dict((body, (sc, got)) for sc, body, _, got in self.ns.task_rank(self.ctx, task or {}))
-        return self._task
 
     def by_id(self, cue, strong_only=False, top1=False, plain=False):
         """[단서 하나]
-        - [(기억 경로, 순위, 점수, 줄, 이름 일치)] 순위 0 그대로, 1 별칭, 2 정규화. 이름 일치 = 기억 파일 이름에 단서가 낱말 단위로 있다
-          (첫 링크 글 일치는 이름 일치로 치지 않는다 - 색인 줄 머리가 곧 링크 글이라 앞쪽 일치가 모두 여기 든다)
+        - [(기억 경로, 순위, 점수, 줄)] 순위 0 그대로, 1 별칭, 2 정규화
         - strong_only 면 기억 파일 이름이나 첫 링크 글에 단서가 있을 때만. 흔한 단서는 파일 이름 일치만
         - plain(소문자 한 낱말 파일 이름과 그 확장자 붙은 이름): 낱말 단위 일치만, 공용 층 기억은 빼고 프로젝트, 스택 기억만.
           진짜 사용자 뇌 5개 프로젝트에서 공용 층 일치는 거의 우연이었다(protocol.ts -> collaboration-protocol 같은 것)
@@ -548,7 +531,7 @@ class Mem(object):
                 out = [min(out, key=lambda x: (x[1], -x[2]))]
             else:
                 return []
-        return out
+        return [(b, t, sc, ln) for b, t, sc, ln, _ in out]
 
 
 def clip(s, limit):
@@ -569,11 +552,9 @@ def gist(line, limit=ITEM_CHARS):
     return clip(s, limit)
 
 
-def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=None, task=None):
+def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=None):
     """[떠올림 한 번]
     - 반환: (항목 [(기억 상대 경로, 키워드, 단서)], 쓴 단서)
-    - task(세션의 작업 낱말 {낱말: 가중치})가 있으면 후보 순위에 작업 점수를 더하고, read 와 bash 에서는 작업 점수가 없고
-      기억 파일 이름으로 맞은 것도 아닌 후보를 뺀다. 에러는 신호가 강해 빼지 않는다
     """
     exclude = set(x for x in (root or '').split('/') if x)
     if kind in ('read', 'edit'):
@@ -589,20 +570,12 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
     if not cues and not synapses():
         return [], []
     mem = Mem(slug, stack)
-    tsc = mem.task_scores(task) if task else {}
     cand = {}
     for c, st in cues:
-        for body, tier, sc, line, named in mem.by_id(c, st in ('strong', 'plain'), st == 'api', st in ('plain', 'file')):
-            t = (tsc.get(body) or (0.0,))[0]
-            key = (tier, -(sc + min(2 * TASK_BONUS, TASK_BONUS * t / PROMPT_MIN)))
-            prev = cand.get(body)
-            if prev is None or key < prev[0]:
-                cand[body] = (key, line, c, named or bool(prev and prev[3]))
-            elif named:
-                cand[body] = prev[:3] + (True,)
-    if tsc and kind in ('read', 'bash'):
-        # 작업과 닿지 않는 곁가지 - 기억 파일 이름으로 맞은 것(그 파일, 그 API 에 관한 기억)만 남긴다
-        cand = dict((b, v) for b, v in cand.items() if v[3] or (tsc.get(b) or (0.0,))[0] > TASK_KEEP)
+        for body, tier, sc, line in mem.by_id(c, st in ('strong', 'plain'), st == 'api', st in ('plain', 'file')):
+            key = (tier, -sc)
+            if body not in cand or key < cand[body][0]:
+                cand[body] = (key, line, c)
     if len(cand) > MAX_ITEMS.get(kind, 2):
         st = strength()
         today = time.strftime('%Y-%m-%d')
@@ -611,10 +584,10 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
             if last:
                 age = days_between(last, today)
                 bonus = 2 if age <= 14 else (1 if age <= 45 else 0)
-                key, line, cue, named = cand[body]
-                cand[body] = ((key[0], key[1] - bonus), line, cue, named)
+                key, line, cue = cand[body]
+                cand[body] = ((key[0], key[1] - bonus), line, cue)
     items = []
-    for body, (key, line, cue, _) in sorted(cand.items(), key=lambda kv: kv[1][0]):
+    for body, (key, line, cue) in sorted(cand.items(), key=lambda kv: kv[1][0]):
         rel = mem.ctx.rel(body)
         if rel in seen:
             continue
@@ -703,135 +676,14 @@ def recall_cmd():
     return 'bash ' + shlex.quote(plat.norm(os.path.join(HERE, 'recall.sh')))
 
 
-def render(items, task=False):
+def render(items):
     """[떠올림 한 줄] 내용 대신 키워드만 건넨다(항목당 약 50자) - 펼칠지는 세션이 정한다"""
     kws = ', '.join('`%s`' % kw for _, kw, _ in items)
-    if task:
-        return L.t('recall_task') % (kws, recall_cmd())
     cues = []
     for _, _, c in items:
         if c not in cues:
             cues.append(c)
     return L.t('recall') % (kws, ', '.join('`%s`' % c for c in cues[:4]), recall_cmd())
-
-
-# ---------------------------------------------------------------- 작업 낱말
-TASK_SPLIT_RE = re.compile(r'[/\\:=,;()\[\]{}<>"\'`|*#!?~+&^%$@]')
-CJK_RE = re.compile(r'[一-鿿]+|[゠-ヿ]{2,}')
-# 어느 요청에나 나오는 영어 낱말 - 색인에서 드물어도(한국어 뇌) 작업을 가리키지 않는다
-TASK_STOP = frozenset('the and for with this that from into are was were been being is it its not but you your can will should would '
-                      'could have has had all any some what when where which who how why then than there here also just only more most '
-                      'other about using used make need want please let fix see now one two out our they them these those does did '
-                      'done don doesn yes okay like look sure each every same very much many well way thing things still again first '
-                      'last next before after onto over under via per etc https http www com'.split())
-# 한국어 기능어 - 조사를 떼도 남는 부사, 의존 명사 꼴. 색인에서 드물게 나오면 idf 가 커서 엉뚱한 기억을 끌어온다
-TASK_STOP_KO = frozenset('가장 같은 같음 같이 거기 여기 저기 그리고 그러나 하지만 그래서 또는 모든 모두 새로 미리 먼저 다시 이미 아직 바로 '
-                         '지금 이제 이번 위해 대해 통해 따라 때문 경우 그것 이것 저것 무엇 어떻게 어디 언제 그냥 정말 진짜 너무 아주 '
-                         '매우 계속 전부 일부 거의 있는 없는 있다 없다 있어 없어 있으면 없으면 처럼 대로 곳에 안에 안은 밖에 위에 '
-                         '뒤에 앞에 때는 것은 것이 것을 중에 전에 후에 우리 사람 정도 해당 어느 무슨 그런 이런 저런'.split())
-# 동사로 쓴 한국어 명사(확인해, 수정했는데) - 어미를 떼어 명사(확인, 수정)로 쓴다
-KO_VERB_END = ('했는데', '하는데', '해주세요', '해줘', '해봐', '해서', '했어', '했다', '했고', '했지만', '하는', '하고', '하면', '한다',
-               '해야', '해도', '하자', '하게', '하려', '할', '한', '해', '된다', '되는', '되고', '되면', '됐다', '됐는데', '돼서', '돼',
-               '된', '될', '는데', '지만', '면서')
-TASK_HALF = 600           # 낱말 가중치가 반이 되는 글자 위치 - 긴 요청은 앞(제목, 첫 문단)이 작업을 말하고 뒤는 공통 원칙, 붙여 넣은 글이다
-TASK_FLOOR = 0.15         # 가중치가 이보다 작은 낱말은 버린다(약 1,600자 뒤)
-
-
-def task_words(text):
-    """[작업 낱말] 요청 글, 계획 → {낱말 키: 가중치}. 낱말 나누기와 한국어 조사,어미 떼기는 nbsearch(query_words, word_key)를 쓴다
-    - 가중치: 처음 나온 위치가 앞일수록 크고(TASK_HALF 마다 반), 여러 번 나오면 조금 더(최대 2배)
-    - 영어는 3자 이상이고 글자가 있는 것, 흔한 낱말(TASK_STOP) 제외. 한국어는 줄기 2자 이상, 기능어(TASK_STOP_KO) 제외
-    - 띄어 쓰지 않는 일본어, 중국어는 한자 두 글자씩과 가타카나 낱말
-    """
-    import nbsearch as ns
-    low = TASK_SPLIT_RE.sub(' ', text[:TASK_TEXT]).lower()
-    out = {}
-
-    def add(k, wt):
-        if k and wt > out.get(k, 0):
-            out[k] = wt
-
-    for w in ns.query_words(low):
-        pos = low.find(w)
-        wt = 0.5 ** (max(0, pos) / float(TASK_HALF)) * min(2.0, 1 + 0.25 * (low.count(w) - 1))
-        if wt < TASK_FLOOR:
-            continue
-        if CJK_RE.search(w) and not any(ns.is_hangul(c) for c in w):
-            for run in CJK_RE.findall(w):
-                if '一' <= run[0] <= '鿿' and len(run) >= 3:
-                    for i in range(len(run) - 1):
-                        add(run[i:i + 2], wt)
-                elif len(run) >= 2:
-                    add(run, wt)
-            continue
-        k = ns.word_key(w).strip('.-_')
-        if k.isascii():
-            if len(k) >= 3 and any(c.isalpha() for c in k) and k not in TASK_STOP:
-                add(k, wt)
-            continue
-        if ns.is_hangul(k[-1:] or 'a'):
-            for e in KO_VERB_END:
-                if k.endswith(e):
-                    # 두 글자 넘게 남으면 명사(확인해 → 확인), 아무것도 안 남으면 동사 자체(했는데), 한 글자 남으면 그대로(권한, 역할)
-                    k = k[:-len(e)] if len(k) - len(e) >= 2 else ('' if len(k) == len(e) else k)
-                    break
-            if len(w) >= 3 and any(w.endswith(e) and len(w) - len(e) == 1 for e in ns.HANGUL_END if len(e) >= 2):
-                k = ''   # 한 글자 명사 + 두 글자 조사(때까지, 앞으로, 것으로) - 기능어
-        if len(k) >= 2 and k not in TASK_STOP_KO:
-            add(k, wt)
-    return out
-
-
-def task_update(task, text, ctx, decay):
-    """[작업 낱말 갱신] task {낱말: 가중치} 에 글의 낱말을 넣는다(task_words 의 가중치)
-    - decay(새 요청)면 이전 낱말의 가중치를 절반으로. 색인에 없는 낱말, 너무 흔한 낱말은 순위에 못 쓰니 두지 않는다
-    - TASK_WORDS 개를 넘으면 가중치 x idf 가 큰 것부터 남긴다
-    """
-    import math
-    import nbsearch as ns
-    task = dict((k, v * 0.5) for k, v in (task or {}).items() if v * 0.5 >= 0.1) if decay else dict(task or {})
-    idf = {}
-    for k, wt in task_words(text).items():
-        df, total = ns.word_df(ctx, k)
-        if df and df <= total * TASK_COMMON:
-            task[k] = max(task.get(k, 0), wt)
-            idf[k] = math.log((total + 1.0) / (1.0 + df))
-    if len(task) > TASK_WORDS:
-        for k in task:
-            if k not in idf:
-                df, total = ns.word_df(ctx, k)
-                idf[k] = math.log((total + 1.0) / (1.0 + df))
-        keep = sorted(task, key=lambda k: (-task[k] * idf[k], k))[:TASK_WORDS]
-        task = dict((k, task[k]) for k in keep)
-    return dict((k, round(v, 3)) for k, v in task.items())
-
-
-def task_recall(mem, task, seen, k=PROMPT_ITEMS):
-    """[요청 떠올림] 작업 점수가 T 이상인 기억 키워드를 k 개까지. 반환: [(기억 상대 경로, 키워드, 맞은 낱말)]"""
-    items = []
-    for sc, body, _, got in mem.ns.task_rank(mem.ctx, task):
-        if sc < PROMPT_MIN:
-            break
-        if not os.path.isfile(body):
-            continue
-        rel = mem.ctx.rel(body)
-        if rel in seen:
-            continue
-        items.append((rel, keyword(rel), got))
-        if len(items) >= k:
-            break
-    return items
-
-
-def plan_file(p):
-    """[Claude Code 계획 파일인가] <설정 폴더>/plans/*.md - 이름이 임의 낱말(polymorphic-cuddling-blum)이라 단서가 못 되고, 내용은 작업 낱말이다"""
-    if not p or not p.endswith('.md'):
-        return False
-    d = os.path.dirname(plat.norm(p))
-    if os.path.basename(d) != 'plans':
-        return False
-    cfg = os.environ.get('CLAUDE_CONFIG_DIR') or os.path.join(os.path.expanduser('~'), '.claude')
-    return plat.key(os.path.dirname(d)) == plat.key(plat.norm(cfg))
 
 
 # ---------------------------------------------------------------- 깨어남
@@ -1278,27 +1130,6 @@ def verify_block(d, sid):
     return L.t('gate_verify') % len(pt.get('files') or [])
 
 
-def prompt_recall(st, sc, prompt, sid, t0):
-    """[요청 떠올림 - UserPromptSubmit] 요청 글로 작업 낱말을 갱신하고, 작업에 걸릴 만한 기억 키워드 한 줄(없으면 빈 글)
-    - 예전에는 요청마다 '색인을 열어 본다' 습관 한 줄을 실었다(세션당 중앙값 9.5번). 이제 걸린 것이 있을 때만 키워드를 싣는다
-    """
-    mem = Mem(sc[1], sc[2])
-    st['task'] = task_update(st.get('task'), prompt, mem.ctx, True)
-    seen = st.get('seen') or []
-    if not st['task'] or len(seen) >= SESSION_CAP or st.get('chars', 0) >= SESSION_CHARS:
-        return ''
-    items = task_recall(mem, st['task'], set(seen))
-    if not items:
-        return ''
-    out = render(items, task=True)
-    st['seen'] = seen + [rel for rel, _, _ in items]
-    st['chars'] = st.get('chars', 0) + len(out)
-    top = sorted(st['task'], key=lambda k: -st['task'][k])[:8]
-    log({'t': int(t0), 'sid': sid, 'ev': 'prompt', 'cues': top, 'shown': [rel for rel, _, _ in items], 'chars': len(out),
-         'ms': int((time.time() - t0) * 1000)})
-    return out
-
-
 def hook():
     t0 = time.time()
     raw = sys.stdin.buffer.read().decode('utf-8', 'replace')   # Windows 의 시스템 코드 페이지로 읽으면 한글 요청이 깨진다
@@ -1349,18 +1180,15 @@ def hook():
     if ev == 'UserPromptSubmit':
         if agent:
             return 0
+        # 요청 글로는 떠올리지 않는다 - 이 요청에 무엇이 필요한지는 세션이 판단한다(글자 일치로 흉내 내면 정밀도가 낮았다, 머리 주석 근거)
         sc = scope(d.get('cwd') or '')
-        if sc is not None:
+        pc = persona_of(sc[1]) if sc is not None else None
+        if pc:
             st = load_state(sp)
-            text = prompt_recall(st, sc, d.get('prompt') or '', sid, t0)
-            pc = persona_of(sc[1])
-            if pc:
-                st['pt'] = {}   # 요청마다 관문 상태(수정한 파일, 검증 여부, 이미 물었는지)를 새로 센다
-                if pc['turn']:
-                    text = (text + '\n' if text else '') + pc['turn']
+            st['pt'] = {}   # 요청마다 관문 상태(수정한 파일, 검증 여부, 이미 물었는지)를 새로 센다
             save_state(sp, st)
-            if text:
-                emit(ev, text)
+            if pc['turn']:
+                emit(ev, pc['turn'])
         return 0
     if ev == 'SubagentStart':
         row = scope(d.get('cwd') or '', full=True)
@@ -1389,15 +1217,6 @@ def hook():
             for rel in recall_opens(text, d.get('cwd') or ''):
                 log({'t': int(t0), 'sid': sid, 'ev': 'open', 'body': rel})
             return 0
-    if path and plan_file(path):
-        # 계획 파일: 이름은 단서가 아니고, 쓰는 내용은 작업 낱말이다(메인 세션 상태에 둔다 - 서브에이전트도 읽는다)
-        sc = scope(d.get('cwd') or '')
-        if kind == 'edit' and new and sc is not None:
-            mp = state_file(sid, '')
-            st = load_state(mp)
-            st['task'] = task_update(st.get('task'), new, Mem(sc[1], sc[2]).ctx, False)
-            save_state(mp, st)
-        return 0
     if kind in ('read', 'edit') and path:
         rp = os.path.realpath(path)
         if under(os.path.realpath(CX), rp) or under(CX, path):
@@ -1420,13 +1239,11 @@ def hook():
         return 0
     if kind == 'bash' and st.get('bash', 0) >= cap_bash:
         return 0
-    task = st.get('task')
     if agent:
         tree = load_state(state_file(sid, ''))
         if tree.get('sub_chars', 0) >= TREE_SUB_CHARS:
             return 0
-        task = tree.get('task')   # 서브에이전트는 메인 세션의 작업 낱말을 쓴다
-    items, cues = recall(slug, stack, kind, text, set(seen), path, root, new, old, task)
+    items, cues = recall(slug, stack, kind, text, set(seen), path, root, new, old)
     if not items:
         return 0
     out = render(items)
@@ -1479,27 +1296,14 @@ def probe(argv):
     if row is None:
         print('범위 밖:', cwd)
         return 0
-    task = None
-    if '--task' in a:
-        mem = Mem(row[1], row[2])
-        task = task_update({}, a[a.index('--task') + 1], mem.ctx, False)
-        print('작업 낱말:', task)
     t0 = time.time()
     if kind == 'orient':
         o = orient(row)
         print(o)
         print('(%d자)' % len(o))
-    elif kind == 'prompt':
-        mem = Mem(row[1], row[2])
-        task = task_update(task, text, mem.ctx, True)
-        print('작업 낱말:', task)
-        for sc, body, _, got in mem.ns.task_rank(mem.ctx, task, 8):
-            print('  %5.1f %s %s' % (sc, mem.ctx.rel(body), ','.join(got)))
-        items = task_recall(mem, task, set())
-        print(render(items, task=True) if items else '(떠오른 기억 없음)')
     else:
         items, cues = recall(row[1], row[2], kind, text, set(), text if kind in ('read', 'edit') else None, row[0],
-                             text if kind == 'edit' else None, task)
+                             text if kind == 'edit' else None)
         print('단서:', cues)
         print(render(items) if items else '(떠오른 기억 없음)')
     print('%.0f ms' % ((time.time() - t0) * 1000))
