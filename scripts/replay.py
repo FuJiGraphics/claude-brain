@@ -152,7 +152,7 @@ def skipped_sessions():
 def automated(path):
     """[사람 없는 자동 실행 대화록인가]
     - 머리 줄의 entrypoint 가 sdk-cli 면 헤드리스 자동 실행(hippocampus 자신, 스크립트, 예약 작업)이다. 기억할 사람의 경험이 아니다
-    - .active/skip-sessions.txt 에 적힌 세션(시험 세션 등)도 같은 취급이다 - 재생, 연합 학습, 등록 제안에서 빠진다
+    - .active/skip-sessions.txt 에 적힌 세션(시험 세션 등)도 같은 취급이다 - 재생, 등록 제안에서 빠진다
     """
     if os.path.splitext(os.path.basename(path))[0] in skipped_sessions():
         return True

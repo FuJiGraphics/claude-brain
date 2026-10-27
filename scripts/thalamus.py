@@ -567,7 +567,7 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
         cues = error_cues(text, exclude, root)
     else:
         return [], []
-    if not cues and not synapses():
+    if not cues:
         return [], []
     mem = Mem(slug, stack)
     cand = {}
@@ -594,20 +594,6 @@ def recall(slug, stack, kind, text, seen, path=None, root=None, new=None, old=No
         items.append((rel, keyword(rel), cue))
         if len(items) >= MAX_ITEMS.get(kind, 2):
             break
-    # 경험으로 배운 연결: 인덱스 줄 일치로는 못 찾는 개념 수준 기억을 하나까지 더한다
-    syn = synapses()
-    if syn:
-        got = set(r for r, _, _ in items) | set(seen)
-        for c in synapse_cues(kind, path, text, new):
-            for rel, sup, conf in syn.get(c, []):
-                bp = os.path.join(CX, rel)
-                if rel in got or not os.path.isfile(bp):
-                    continue
-                items.append((rel, keyword(rel), c.split(':', 1)[-1]))
-                got.add(rel)
-                break
-            if len(items) > MAX_ITEMS.get(kind, 2):
-                break
     return items, [c for c, _ in cues]
 
 
@@ -626,59 +612,6 @@ def days_between(a, b):
         return (datetime.date.fromisoformat(b[:10]) - datetime.date.fromisoformat(a[:10])).days
     except ValueError:
         return 9999
-
-
-_SYN = None
-
-
-def synapses():
-    """[연결 표] synapse.py 가 밤마다 배운 {단서: [[기억, 지지도, 확신도]]}. 없으면 빈 표"""
-    global _SYN
-    if _SYN is None:
-        try:
-            with open(os.path.join(CX, '.hippocampus', 'synapses.json'), encoding='utf-8') as f:
-                _SYN = json.load(f).get('cues') or {}
-        except (IOError, OSError, ValueError):
-            _SYN = {}
-    return _SYN
-
-
-def synapse_cues(kind, path, text, new):
-    """[연결 표를 찾을 단서] synapse.py 의 단서 형식과 같다"""
-    import synapse
-    out = []
-    if path:
-        out += synapse.file_cues(path)
-    if kind == 'bash':
-        for m in FILE_TOKEN_RE.finditer(HEREDOC_RE.sub('\n', text or '')):
-            out += synapse.file_cues(m.group(0))
-        out += synapse.api_cues(text)
-    if kind == 'edit' and new:
-        out += synapse.api_cues(new)
-    if kind == 'error':
-        out += synapse.err_cues(text)
-    return out
-
-
-DATE_TAIL_RE = re.compile(r'-\d{4}-\d{2}-\d{2}$')
-
-
-def keyword(rel):
-    """[기억의 키워드] 기억 파일 이름(슬러그)에서 끝 날짜를 뗀 것 - 영어 kebab 문장이라 뜻이 읽히고, 기억마다 하나라
-    recall.sh 로 찾으면 그 기억이 맨 위에 온다(색인 줄의 링크 대상에 그대로 있어 1순위 히트와 슬러그 가산을 받는다)
-    """
-    s = os.path.splitext(os.path.basename(rel))[0]
-    return DATE_TAIL_RE.sub('', s) or s
-
-
-def recall_cmd():
-    """[세션이 기억을 펼칠 명령] bash <brain>/scripts/recall.sh"""
-    return 'bash ' + shlex.quote(plat.norm(os.path.join(HERE, 'recall.sh')))
-
-
-def remember_cmd():
-    """[세션이 겪은 것을 표시할 명령] bash <brain>/scripts/remember.sh (--mark 와 함께 - 대화록에 표식만 남긴다)"""
-    return 'bash ' + shlex.quote(plat.norm(os.path.join(HERE, 'remember.sh')))
 
 
 def render(items):
