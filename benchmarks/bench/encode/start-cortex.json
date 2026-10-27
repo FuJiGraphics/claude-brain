@@ -1,0 +1,8 @@
+{
+ "from": "fixture/cortex",
+ "remove": [
+  "projects/ledger/lessons/gen-rates-built-with-half-even-rounding-2026-09-02.md",
+  "projects/ledger/lessons/split-bill-remainder-goes-to-last-payer-2026-09-10.md"
+ ],
+ "note": "저장 벤치의 시작 기억 저장소: 떠올림 벤치 픽스처에서 시나리오가 새로 배워야 할 핵심 기억 둘을 뺀 것(색인 줄도 함께 뺀다). 나머지 기억은 헷갈리게 하는 기억으로 그대로 둔다. 이상적 기록 갈래는 빼지 않은 픽스처를 쓴다."
+}

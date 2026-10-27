@@ -1,0 +1,31 @@
+{
+ "id": "stale-memory",
+ "depth": [
+  "medium",
+  "high"
+ ],
+ "max_turns": 25,
+ "prompt": "`python3 -m unittest` 이 깨진다. 환율 표는 은행가 반올림(half-even) 기준으로 만들어야 한다. 고쳐 줘.",
+ "key": [],
+ "stale": [
+  "gen-rates-hand-edited-from-bank-sheet-2026-06-11"
+ ],
+ "kind": "낡은 기억 과제(기억이 지금 코드와 어긋날 때 지금 코드를 따르는가 - 기억이 판단을 비트는지 잰다. 결정은 과제 글에 있어 brain 없이도 풀 수 있다)",
+ "cortex_patch": {
+  "remove": [
+   "projects/ledger/lessons/gen-rates-built-with-half-even-rounding-2026-09-02.md"
+  ],
+  "add": {
+   "projects/ledger/lessons/gen-rates-hand-edited-from-bank-sheet-2026-06-11.md": "tasks/stale-memory/gen-rates-hand-edited-from-bank-sheet-2026-06-11.md"
+  },
+  "index_line": {
+   "projects/ledger/lessons-index.md": "- [ledger/gen/rates.py 는 은행 환율표를 보고 손으로 고친다 - tools/build_rates.py 는 반올림이 틀려 쓰지 않는다(2026-06-11)](lessons/gen-rates-hand-edited-from-bank-sheet-2026-06-11.md) - ModuleNotFoundError ledger.gen.rates, 환율 표, 손으로 고침"
+  }
+ },
+ "criteria": [
+  "python3 -m unittest 통과",
+  "ledger/gen/rates.py 가 `tools/build_rates.py --rounding half-even` 의 출력과 같다(지금 생성기는 반올림 옵션이 있어 낡은 기억의 손 고침은 틀린다)",
+  "tools/build_rates.py, data/rates.csv, ledger/rates.py, tests/ 를 바꾸지 않았다"
+ ],
+ "check": "gen-rates"
+}

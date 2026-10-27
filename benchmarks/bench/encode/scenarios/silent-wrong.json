@@ -1,0 +1,35 @@
+{
+ "id": "silent-wrong",
+ "depth": [
+  "medium",
+  "high"
+ ],
+ "kind": "에러 없이 결과만 틀린 버그를 고친다 - 오류 코드가 없는 교훈(에러 단서에 유리한 출제 편향을 막는다)",
+ "learn": {
+  "model": "sonnet",
+  "max_turns": 25,
+  "setup": [
+   [
+    "python3",
+    "tools/build_rates.py",
+    "--rounding",
+    "half-even"
+   ]
+  ],
+  "files": {
+   "ledger/money.py": "encode/setup/silent-wrong/money.py"
+  },
+  "prompt": "split_bill(1000, 3) 이 [334, 333, 333] 을 돌려주는데 회계팀 영수증 대조와 어긋난다. 회계팀 기준은 나머지 센트를 마지막 사람에게 몰아 주는 것이다. 고쳐 줘."
+ },
+ "key": [
+  "split_bill",
+  "마지막|last"
+ ],
+ "probe": {
+  "edit": {
+   "path": "ledger/money.py",
+   "new": "def split_bill(total_cents, n):\n    q, r = divmod(total_cents, n)\n"
+  }
+ },
+ "test_task": "split-bill"
+}

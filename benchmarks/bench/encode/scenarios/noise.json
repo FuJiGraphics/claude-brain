@@ -1,0 +1,25 @@
+{
+ "id": "noise",
+ "depth": [
+  "low",
+  "medium",
+  "high"
+ ],
+ "kind": "기억할 것이 없는 일상 작업 - 이름 바꾸기와 그에 따른 시험 실패(종료 코드 0 으로 가려진 에러 포함). 기억이 생기지 않아야 한다",
+ "learn": {
+  "model": "sonnet",
+  "max_turns": 25,
+  "setup": [
+   [
+    "python3",
+    "tools/build_rates.py",
+    "--rounding",
+    "half-even"
+   ]
+  ],
+  "prompt": "ledger/money.py 의 add 함수 이름을 sum_cents 로 바꾸고 쓰는 곳도 모두 고쳐 줘. 확인은 `python3 -m unittest 2>&1 | tail -5` 로 해 줘."
+ },
+ "key": [],
+ "probe": null,
+ "test_task": null
+}

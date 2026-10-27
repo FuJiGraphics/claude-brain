@@ -1,0 +1,27 @@
+{
+ "id": "incident",
+ "depth": [
+  "low",
+  "medium",
+  "high"
+ ],
+ "kind": "에러를 겪고 사용자 결정을 듣고 고친다 - 증상(오류 코드, 인용된 모듈 이름)이 있는 교훈",
+ "learn": {
+  "model": "sonnet",
+  "max_turns": 25,
+  "setup": [],
+  "prompt": "`python3 -m unittest` 이 깨진다. 원인을 찾아 고쳐 줘. 참고로 환율 표는 회계팀 기준이라 반드시 은행가 반올림(half-even)으로 만들어야 해."
+ },
+ "key": [
+  "half.?even|은행가",
+  "build_rates"
+ ],
+ "probe": {
+  "run": [
+   "python3",
+   "-m",
+   "unittest"
+  ]
+ },
+ "test_task": "gen-rates"
+}

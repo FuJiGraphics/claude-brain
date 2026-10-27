@@ -1,0 +1,32 @@
+{
+ "id": "chat-decision",
+ "depth": [
+  "medium",
+  "high"
+ ],
+ "kind": "다른 일을 하던 중에 사용자가 지나가듯 말한 결정 - 오류 코드가 없는 교훈",
+ "learn": {
+  "model": "sonnet",
+  "max_turns": 25,
+  "setup": [
+   [
+    "python3",
+    "tools/build_rates.py",
+    "--rounding",
+    "half-even"
+   ]
+  ],
+  "prompt": "ledger/money.py 에 format_cents(c) 함수를 추가해 줘. 정수 센트를 '1,234.56' 꼴 문자열로 바꾼다(음수는 '-1,234.56'). 시험도 함께 추가해 줘. 아 그리고 다음에 split_bill 을 만들 때는 나머지 센트를 마지막 사람에게 몰아 줘야 해. 영수증 대조 화면이 마지막 사람만 보정하거든."
+ },
+ "key": [
+  "split_bill",
+  "마지막|last"
+ ],
+ "probe": {
+  "edit": {
+   "path": "ledger/money.py",
+   "new": "def split_bill(total_cents, n):\n    q, r = divmod(total_cents, n)\n"
+  }
+ },
+ "test_task": "split-bill"
+}
