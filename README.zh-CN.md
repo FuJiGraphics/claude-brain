@@ -162,7 +162,7 @@ bash ~/.claude/skills/brain/scripts/install.sh
 
 ## 费用与隐私
 
-- 回忆不会另外调用 API。不过会给上下文增加一些内容:会话开始时的项目记忆地图(最多约 6,000 字)、每次请求的一行习惯提醒,以及工作中想起的记忆(每个会话平均约 2,000 字,上限 9,000 字)。在作者的环境中,这些加起来每个会话约 15,000 字(约 4,000 到 5,000 个 token)。每次钩子大约耗时 25ms。
+- 回忆不会另外调用 API。不过会给上下文增加一些内容:会话开始时的项目记忆地图(最多约 6,000 字),以及工作中想起的记忆的关键词(包括与请求相关的,每个会话上限 9,000 字)。重放作者的 80 份对话记录,会话开始时的地图平均约 2,500 字,工作中的关键词平均约 1,000 字(2026-10-28;改用关键词之前约 2,700 字)。每次钩子大约耗时 25ms。
 - 海马会使用你的 Claude 用量。每个任务运行一次 `claude -p`(默认 Sonnet 5.5,effort medium)。在演示用的记忆库上测得:记录一次 0.06 到 0.13 美元,整理一次 0.05 到 0.11 美元(按 API 价格)。真实项目的记忆越多,费用会稍高一些。想省一点的话,可以试试 `/claude-brain-config eco`。
 - 应用的 AI 功能(气泡、大白话解释、提问)会调用 Claude Haiku,每次约 0.002 到 0.004 美元。解释会缓存起来。
 - 用了多少,随时可以在 `/claude-brain-status` 和应用设置的"用量"里查看。如果你用的是 Pro 或 Max 订阅,这个金额是用量的参考,不是实际收费。
@@ -237,7 +237,7 @@ bash scripts/install.sh
 
 ## 需要了解的地方
 
-- 测量来自一个人的项目(macOS,主要是 Unity/C# 和 VS Code 扩展)。从错误中提取线索的规则是针对 C# 编译错误调整的。按打开或修改的文件名回忆的部分与语言无关;命令中的文件能识别常见语言的源码和配置文件扩展名。API 名能识别像 `PaymentClient.Charge(` 这样以大写字母开头的点号写法,以及正在修改的代码里像 `chargeCard(`、`charge_card(` 这样由两个以上单词组成的函数名。像 `charge.ts` 这样只由一个常见英文单词构成的文件名,只有当这个词出现在项目或技术栈记忆的文件名或标题中时才作为线索。
+- 测量来自一个人的项目(macOS,主要是 Unity/C# 和 VS Code 扩展)。错误按各语言的格式表识别(tsc、MSVC、C#、gcc、clang、swift、javac、Rust、Go、Python、Node、vitest、jest、Java、Kotlin、Ruby、PHP);加了 `| tail` 而以退出码 0 结束的命令,只要输出符合这些格式也算作错误。按打开或修改的文件名回忆的部分与语言无关;命令中的文件能识别常见语言的源码和配置文件扩展名。API 名能识别像 `PaymentClient.Charge(` 这样以大写字母开头的点号写法,以及正在修改的代码里像 `chargeCard(`、`charge_card(`、`Vec::with_capacity(`、`http.HandleFunc(` 这样由两个以上单词组成的函数名。像 `charge.ts` 这样只由一个常见英文单词构成的文件名,只有当这个词出现在项目或技术栈记忆的文件名或标题中时才作为线索。
 - Windows 支持目前是测试版。路径、钩子、任务计划程序和应用都已移植并检查过,但还没在真实的 Windows 机器上充分使用。遇到问题的话,欢迎提 Issue 告诉我们。
 - 在依赖上下文的工作中,会多花时间和 token(请参考上面的测试)。
 - 海马是在你电脑上无人监督运行的代理。虽然设有拒绝规则,如果你不放心,可以把 `scripts/hippocampus-perm.mode` 改成 `acceptEdits`。不过这样海马就无法写入记忆文件,brain 也就不再学习新东西(回忆照常可用)。
@@ -266,20 +266,20 @@ Claude Code 本来就会保存的对话记录,充当了短期记忆。同一段�
 
 <details><summary><b>回忆 - thalamus</b></summary>
 
-钩子挂在 SessionStart、UserPromptSubmit、PreToolUse(Edit、Write、MultiEdit、NotebookEdit、Bash、AskUserQuestion)、PostToolUse(Read)、PostToolUseFailure(Bash)、SubagentStart、Stop、PreCompact、SessionEnd 上,只在 `cortex/registry.md` 登记过的项目里生效。
+钩子挂在 SessionStart、UserPromptSubmit、PreToolUse(Edit、Write、MultiEdit、NotebookEdit、Bash、AskUserQuestion)、PostToolUse(Read、Bash)、PostToolUseFailure(Bash)、SubagentStart、Stop、PreCompact、SessionEnd 上,只在 `cortex/registry.md` 登记过的项目里生效。
 
 | 钩子事件 | 线索 |
 |---|---|
 | SessionStart | 项目要点、项目的 `INDEX.md`(上限 3,000 字)、技术栈和公共索引(分别 2,000 字、1,200 字)、流程记忆的行 |
-| UserPromptSubmit | 提醒在规划前先打开这次工作范围的索引的一行习惯 |
-| PostToolUse (Read) | 打开的文件名 |
-| PreToolUse (Edit、Write、MultiEdit、NotebookEdit) | 要修改的文件名、编辑内容中新出现的 API 名 |
+| UserPromptSubmit | 请求中的词(任务词)与记忆标题多处吻合时,该记忆的关键词。没有吻合时什么都不加 |
+| PostToolUse (Read、Bash) | 打开的文件名、以退出码 0 结束的命令输出中的错误 |
+| PreToolUse (Edit、Write、MultiEdit、NotebookEdit) | 要修改的文件名、编辑内容中新出现的 API 名(计划文件 `plans/*.md` 不作为线索,而是作为任务词) |
 | PreToolUse (Bash) | 命令读写的文件名、命令里代码的 API 名 |
-| PostToolUseFailure (Bash) | C# 编译错误的文件和错误代码、异常名和第一个项目栈帧的文件 |
+| PostToolUseFailure (Bash) | 从各语言错误格式中提取的文件、错误代码、被引用的标识符、异常名,以及项目内栈帧的文件 |
 | SubagentStart | 工作文件夹所属的项目,以及说明 `[记忆]` 是什么的一行 |
 | Stop、PreCompact、SessionEnd | 不回忆;如果新的对话片段很突出,就开始重放 |
 
-- 没有相关记忆时什么都不输出。每次最多 1 到 2 条(Bash 为 1 条),每条 240 字以内,每个会话上限 40 条或 9,000 字(会话开始时的地图另算)。
+- 没有相关记忆时什么都不输出。只传记忆的关键词(文件名),不传内容(每条约 50 字),是否展开由会话用 `recall.sh <关键词>` 决定。有任务词时,与任务相关的记忆排在前面;由打开的文件或命令涉及的文件想起、但与任务无关的候选会被去掉。每次最多 1 到 2 条(Bash 为 1 条),每个会话上限 40 条或 9,000 字(会话开始时的地图另算)。
 - 如果一条线索同时命中 4 条以上不同的记忆,就视为太常见,只保留文件名中带有这条线索的记忆。
 - 我们重放了 431 个过去的会话,用 Sonnet 判定了 371 次回忆。只在被判为"有干扰"比例低的地方回忆:打开文件(0 到 3%)、编辑之前(8% 到 20%)、命令涉及的文件(约 10%);比例高的请求文字(64%)、"不行"之类的结论(75%)、命令中的 CLI 名称(64%)不作为线索。
 </details>

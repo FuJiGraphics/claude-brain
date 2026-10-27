@@ -16,7 +16,7 @@ disable-model-invocation: true
 | 부품 | 하는 일 | 파일 |
 |---|---|---|
 | cortex (대뇌 피질) | 장기 기억 저장소. registry, common, stacks/<스택>, projects/<슬러그> 3레이어 | `cortex/` |
-| thalamus (시상) | 세션 시작 때 그 프로젝트의 기억 지도를 켜고, 작업 중 다루는 파일, 새 API, 명령이 다루는 파일, 컴파일 에러에 걸린 기억을 떠올린다. 쉬는 순간(턴 끝, 압축 직전, 세션 끝)에 두드러진 구간을 해마로 넘긴다 | `scripts/thalamus.py` (훅) |
+| thalamus (시상) | 세션 시작 때 그 프로젝트의 기억 지도를 켜고, 작업 중 요청 글, 다루는 파일, 새 API, 명령이 다루는 파일, 언어별 에러에 걸린 기억의 키워드(파일 이름)를 건넨다. 펼칠지는 세션이 recall.sh 로 정한다. 쉬는 순간(턴 끝, 압축 직전, 세션 끝)에 두드러진 구간을 해마로 넘긴다 | `scripts/thalamus.py` (훅) |
 | hippocampus (해마) | 대화록 구간을 되짚어 새 기억을 만들고, 정비하고, cortex 에 쓰는 단일 주체 | `agents/hippocampus.md`, `scripts/hippocampus-*.sh` |
 | sleep (잠) | 매일 밤: 기억 강도 집계, 망각(오래 안 쓴 기억 숨기기), 남은 구간 재생, 검색 실패 학습, 조각 정비, 검사 | `scripts/sleep.sh` |
 

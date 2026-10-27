@@ -162,7 +162,7 @@ Most of them are handled by the hook directly and use no tokens. Output follows 
 
 ## Cost and privacy
 
-- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most), a one-line habit reminder with each request, and the memories recalled while you work (about 2,000 characters per session on average, capped at 9,000). Altogether that came to about 15,000 characters per session (roughly 4,000 to 5,000 tokens) on the author's machine. Each hook call takes about 25 ms.
+- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most) and the keywords of memories recalled while you work, including those that match your request (capped at 9,000 characters per session). Replaying 80 of the author's transcripts, the session-start map averaged about 2,500 characters and the keywords about 1,000 characters per session (2026-10-28; about 2,700 before the switch to keywords). Each hook call takes about 25 ms.
 - The hippocampus uses your Claude usage. It runs `claude -p` once per job (Sonnet 5.5 at medium effort by default). On the demo memory store we measured $0.06 to $0.13 per recording job and $0.05 to $0.11 per tidy-up job, at API prices. Real projects with more memories cost a bit more. To spend less, try `/claude-brain-config eco`.
 - The app's AI features (bubbles, plain-word explanations, asking) call Claude Haiku at about $0.002 to $0.004 per call. Explanations are cached.
 - You can check what was spent at any time in `/claude-brain-status` or in the app's "Usage" card. On a Pro or Max plan this is a measure of how much was used, not what you are billed.
@@ -237,7 +237,7 @@ From then on, `/claude-brain-update` is all you need.
 
 ## Good to know
 
-- Measurements come from one person's projects (macOS, mostly Unity/C# and a VS Code extension). The rules for pulling clues out of errors were tuned on C# compile errors. Recall by the names of files you open or edit works in any language. Inside commands, brain recognizes source and config file extensions of common languages. For API names it reads capitalized dotted calls such as `PaymentClient.Charge(`, and, in code being edited, multi-word function names such as `chargeCard(` or `charge_card(`. A file named with a single common word, such as `charge.ts`, counts as a clue only when that word appears in the file name or title of a project or stack memory.
+- Measurements come from one person's projects (macOS, mostly Unity/C# and a VS Code extension). Errors are recognized with a per-language format table (tsc, MSVC, C#, gcc, clang, swift, javac, Rust, Go, Python, Node, vitest, jest, Java, Kotlin, Ruby, PHP), and a command that exits with 0 because of a `| tail` still counts as an error when its output matches one of those formats. Recall by the names of files you open or edit works in any language. Inside commands, brain recognizes source and config file extensions of common languages. For API names it reads capitalized dotted calls such as `PaymentClient.Charge(`, and, in code being edited, multi-word function names such as `chargeCard(`, `charge_card(`, `Vec::with_capacity(` or `http.HandleFunc(`. A file named with a single common word, such as `charge.ts`, counts as a clue only when that word appears in the file name or title of a project or stack memory.
 - Windows support is in beta. Paths, hooks, Task Scheduler and the app were ported and reviewed, but it has not seen much use on real Windows machines yet. If something breaks, an issue would be greatly appreciated.
 - It spends more time and tokens on context-heavy work (see the benchmark above).
 - The hippocampus is an unsupervised agent on your computer. It has deny rules, but if that makes you uneasy, you can set `scripts/hippocampus-perm.mode` to `acceptEdits`. Be aware that the hippocampus then cannot write memory files, so brain stops learning (recall keeps working).
@@ -266,20 +266,20 @@ The transcripts Claude Code already writes serve as short-term memory. Each stre
 
 <details><summary><b>Recall: the thalamus</b></summary>
 
-The hooks run on SessionStart, UserPromptSubmit, PreToolUse (Edit, Write, MultiEdit, NotebookEdit, Bash, AskUserQuestion), PostToolUse (Read), PostToolUseFailure (Bash), SubagentStart, Stop, PreCompact and SessionEnd, and only inside projects registered in `cortex/registry.md`.
+The hooks run on SessionStart, UserPromptSubmit, PreToolUse (Edit, Write, MultiEdit, NotebookEdit, Bash, AskUserQuestion), PostToolUse (Read, Bash), PostToolUseFailure (Bash), SubagentStart, Stop, PreCompact and SessionEnd, and only inside projects registered in `cortex/registry.md`.
 
 | Hook event | Clues |
 |---|---|
 | SessionStart | Project gist, the project's `INDEX.md` (capped at 3,000 chars), the stack and shared indexes (2,000 and 1,200 chars), procedure-card lines |
-| UserPromptSubmit | A one-line habit reminder to open the index for the area you are about to work on |
-| PostToolUse (Read) | Name of the file opened |
-| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | Name of the file being edited, API names new in the edit |
+| UserPromptSubmit | Keywords of memories whose titles match several words of your request (task words). Nothing is added when nothing matches |
+| PostToolUse (Read, Bash) | Name of the file opened, errors in the output of a command that exited with 0 |
+| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | Name of the file being edited, API names new in the edit (plan files `plans/*.md` feed the task words instead) |
 | PreToolUse (Bash) | Files the command reads or writes, API names in code inside the command |
-| PostToolUseFailure (Bash) | File and error code of C# compile errors, exception names and the file of the first project frame |
+| PostToolUseFailure (Bash) | Files, error codes, quoted identifiers and exception names from per-language error formats, and the file of the stack frame inside the project |
 | SubagentStart | The working folder's project and a line on what `[memory]` means |
 | Stop, PreCompact, SessionEnd | No recall; starts a replay if the new stretch of conversation stands out |
 
-- When nothing matches, nothing is printed. At most 1 or 2 memories at a time (1 for Bash), 240 characters each, and 40 memories or 9,000 characters per session (the session-start map is counted separately).
+- When nothing matches, nothing is printed. Only memory keywords (file names) are passed, not their contents (about 50 characters each); the session decides whether to expand one with `recall.sh <keyword>`. With task words, memories related to the task come first, and candidates recalled by an opened file or a command's file that do not touch the task are dropped. At most 1 or 2 memories at a time (1 for Bash), and 40 memories or 9,000 characters per session (the session-start map is counted separately).
 - A clue that matches 4 or more different memories is treated as too common; only memories with that clue in their file name are kept.
 - We replayed 431 past sessions and had Sonnet judge 371 recalls. brain recalls only where the share judged "distracting" was low: file reads (0 to 3%), right before edits (8 to 20%) and files touched by commands (about 10%). It does not use request text (64%), "it doesn't work" conclusions (75%) or CLI names inside commands (64%) as clues.
 </details>

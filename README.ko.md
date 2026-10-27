@@ -162,7 +162,7 @@ bash ~/.claude/skills/brain/scripts/install.sh
 
 ## 비용과 개인정보
 
-- 떠올리기는 따로 API 를 부르지 않습니다. 다만 세션을 시작할 때 프로젝트 기억 지도(최대 약 6,000자), 요청마다 습관 한 줄, 작업 중에 떠올린 기억(세션당 평균 약 2,000자, 상한 9,000자)이 컨텍스트에 더해집니다. 모두 합치면 작성자 환경에서 세션당 약 15,000자(토큰으로 4~5천 개쯤)였습니다. 훅 한 번에 걸리는 시간은 약 25ms 입니다.
+- 떠올리기는 따로 API 를 부르지 않습니다. 다만 세션을 시작할 때 프로젝트 기억 지도(최대 약 6,000자)와, 작업 중에 떠올린 기억의 키워드(요청 글에 걸린 것 포함, 세션당 상한 9,000자)가 컨텍스트에 더해집니다. 작성자의 대화록 80개를 재생해 보면 세션 시작 지도가 평균 약 2,500자, 작업 중 키워드가 평균 약 1,000자였습니다(2026-10-28, 키워드 방식으로 바꾸기 전에는 약 2,700자). 훅 한 번에 걸리는 시간은 약 25ms 입니다.
 - 해마는 Claude 사용량을 씁니다. 작업 한 건마다 `claude -p` 를 한 번 실행합니다(기본 Sonnet 5.5, effort medium). 데모 저장소에서 잰 값은 기록 한 건에 0.06~0.13달러, 정리 한 건에 0.05~0.11달러였습니다(API 요금 기준). 실제 프로젝트에서는 기억이 많을수록 조금 더 듭니다. 줄이고 싶으시면 `/claude-brain-config eco` 를 써 보세요.
 - 앱의 AI 기능(말풍선, 쉬운 말 풀이, 물어보기)은 Claude Haiku 를 부르고, 한 번에 0.002~0.004달러쯤 듭니다. 풀이는 캐시해 둡니다.
 - 쓴 양은 `/claude-brain-status` 와 앱 설정의 "사용량"에서 언제든 확인하실 수 있습니다. Pro, Max 구독이라면 이 금액은 실제 청구액이 아니라 쓴 양을 가늠하는 기준입니다.
@@ -237,7 +237,7 @@ bash scripts/install.sh
 
 ## 알아 두실 점
 
-- 측정은 한 사람의 프로젝트에서 했습니다(macOS, 주로 Unity/C# 와 VS Code 확장). 에러에서 단서를 뽑는 규칙은 C# 컴파일 에러에 맞춰 다듬었습니다. 열거나 고치는 파일의 이름으로 떠올리는 부분은 언어와 상관없이 동작합니다. 명령 속 파일은 흔한 언어의 소스와 설정 파일 확장자를 알아봅니다. API 이름은 `PaymentClient.Charge(` 처럼 대문자로 시작하는 점 표기와, 고치는 코드 안의 `chargeCard(`, `charge_card(` 처럼 낱말이 둘 이상인 함수 이름을 알아봅니다. `charge.ts` 처럼 흔한 영어 낱말 하나로 된 파일 이름은 그 낱말이 프로젝트나 스택 기억의 파일 이름이나 제목에 있을 때만 단서로 씁니다.
+- 측정은 한 사람의 프로젝트에서 했습니다(macOS, 주로 Unity/C# 와 VS Code 확장). 에러는 언어별 형식 표로 알아봅니다(tsc, MSVC, C#, gcc, clang, swift, javac, Rust, Go, Python, Node, vitest, jest, Java, Kotlin, Ruby, PHP). `| tail` 을 붙여 종료 코드 0 으로 끝난 명령도 출력이 이 형식에 맞으면 에러로 봅니다. 열거나 고치는 파일의 이름으로 떠올리는 부분은 언어와 상관없이 동작합니다. 명령 속 파일은 흔한 언어의 소스와 설정 파일 확장자를 알아봅니다. API 이름은 `PaymentClient.Charge(` 처럼 대문자로 시작하는 점 표기와, 고치는 코드 안의 `chargeCard(`, `charge_card(`, `Vec::with_capacity(`, `http.HandleFunc(` 처럼 낱말이 둘 이상인 함수 이름을 알아봅니다. `charge.ts` 처럼 흔한 영어 낱말 하나로 된 파일 이름은 그 낱말이 프로젝트나 스택 기억의 파일 이름이나 제목에 있을 때만 단서로 씁니다.
 - Windows 지원은 베타입니다. 경로, 훅, 작업 스케줄러, 앱을 Windows 에 맞게 옮기고 검토했지만 실제 Windows 기기에서는 아직 충분히 써 보지 못했습니다. 문제가 있으면 이슈로 알려 주시면 감사하겠습니다.
 - 맥락이 중요한 일에서는 시간과 토큰을 더 씁니다(위의 벤치마크를 참고해 주세요).
 - 해마는 이 컴퓨터에서 감독 없이 도는 에이전트입니다. 거부 규칙을 두었지만, 불편하시면 `scripts/hippocampus-perm.mode` 를 `acceptEdits` 로 바꾸실 수 있습니다. 다만 그러면 해마가 기억 파일을 쓰지 못해 brain 이 더는 새로 배우지 않습니다(떠올리기는 그대로 됩니다).
@@ -266,20 +266,20 @@ Claude Code 가 이미 남기고 있는 대화록이 단기 기억 역할을 합
 
 <details><summary><b>떠올리기 - thalamus</b></summary>
 
-훅은 SessionStart, UserPromptSubmit, PreToolUse(Edit, Write, MultiEdit, NotebookEdit, Bash, AskUserQuestion), PostToolUse(Read), PostToolUseFailure(Bash), SubagentStart, Stop, PreCompact, SessionEnd 에 걸립니다. `cortex/registry.md` 에 등록된 프로젝트 안에서만 동작합니다.
+훅은 SessionStart, UserPromptSubmit, PreToolUse(Edit, Write, MultiEdit, NotebookEdit, Bash, AskUserQuestion), PostToolUse(Read, Bash), PostToolUseFailure(Bash), SubagentStart, Stop, PreCompact, SessionEnd 에 걸립니다. `cortex/registry.md` 에 등록된 프로젝트 안에서만 동작합니다.
 
 | 훅 이벤트 | 단서 |
 |---|---|
 | SessionStart | 프로젝트 요지, 프로젝트 `INDEX.md`(3,000자 상한), 스택과 공용 색인(각각 2,000자, 1,200자), 절차 기억 줄 |
-| UserPromptSubmit | 계획 전에 이번 작업 영역의 색인을 열어 보라는 습관 한 줄 |
-| PostToolUse (Read) | 연 파일 이름 |
-| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | 고칠 파일 이름, 편집 내용에 새로 나온 API 이름 |
+| UserPromptSubmit | 요청 글의 낱말(작업 낱말)이 기억 제목에 여럿 맞을 때 그 기억의 키워드. 걸린 것이 없으면 아무것도 붙이지 않습니다 |
+| PostToolUse (Read, Bash) | 연 파일 이름, 종료 코드 0 으로 끝난 명령 출력 속 에러 |
+| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | 고칠 파일 이름, 편집 내용에 새로 나온 API 이름(계획 파일 `plans/*.md` 는 단서 대신 작업 낱말로 씁니다) |
 | PreToolUse (Bash) | 명령이 읽거나 쓰는 파일 이름, 명령 속 코드의 API 이름 |
-| PostToolUseFailure (Bash) | C# 컴파일 에러의 파일과 에러 코드, 예외 이름과 첫 프로젝트 프레임의 파일 |
+| PostToolUseFailure (Bash) | 언어별 에러 형식에서 뽑은 파일, 오류 코드, 인용된 식별자, 예외 이름, 프로젝트 안 스택 프레임의 파일 |
 | SubagentStart | 작업 폴더의 프로젝트와 `[기억]` 이 무엇인지 알리는 한 줄 |
 | Stop, PreCompact, SessionEnd | 떠올림은 없고, 새 대화 구간이 두드러지면 재생을 시작합니다 |
 
-- 걸린 기억이 없으면 아무것도 출력하지 않습니다. 한 번에 1~2개(Bash 는 1개), 항목당 240자 이하, 세션당 40개 또는 9,000자가 상한입니다(세션 시작 지도는 따로 셉니다).
+- 걸린 기억이 없으면 아무것도 출력하지 않습니다. 내용 대신 기억 키워드(파일 이름)만 건네고(항목당 약 50자), 펼칠지는 세션이 `recall.sh <키워드>` 로 정합니다. 작업 낱말이 있으면 작업과 닿는 기억을 앞에 두고, 연 파일이나 명령이 다루는 파일로 떠오른 후보 가운데 작업과 닿지 않는 것은 뺍니다. 한 번에 1~2개(Bash 는 1개), 세션당 40개 또는 9,000자가 상한입니다(세션 시작 지도는 따로 셉니다).
 - 단서 하나가 서로 다른 기억 4개 이상에 걸리면 흔한 단서로 보고 파일 이름에 그 단서가 든 기억만 남깁니다.
 - 과거 대화록 431세션을 다시 돌려 떠올림 371건을 Sonnet 으로 판정했습니다. "방해가 됐다"는 판정 비율이 낮은 파일 열람(0~3%), 편집 직전(8~20%), 명령이 다루는 파일(약 10%)에서만 떠올리고, 비율이 높았던 요청 글(64%), "안 된다"는 결론(75%), 명령 속 CLI 이름(64%)은 단서로 쓰지 않습니다.
 </details>
