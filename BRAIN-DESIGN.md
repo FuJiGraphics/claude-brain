@@ -20,10 +20,10 @@ n-worker 는 오케스트레이션(인터뷰, 플랜, 생산, 검증, 보고)만
 
 - **thalamus (훅, 모든 세션, registry 프로젝트 안에서만)**:
   - SessionStart: 프로젝트 요지(registry 비고) + 프로젝트 INDEX(2,500자 상한) + 절차 기억(단계 카드) 줄. 머리에 "[기억] 으로 시작하는 메시지는 이 프로젝트에 대한 장기 기억" 한 줄. compact 면 떠올린 목록도 비운다.
-  - UserPromptSubmit: 요청 글의 낱말을 세션의 작업 낱말(최근 40개, 새 요청마다 이전 가중치 절반)로 쌓고, 작업 낱말이 색인 줄 제목 부분에 여럿 맞은 기억의 키워드를 건넨다(문턱 이상만 최대 2개, 없으면 출력 없음). 계획 파일(`<설정 폴더>/plans/*.md`)의 내용도 작업 낱말이 된다.
-  - PreToolUse(Edit/Write/Bash), PostToolUse(Read, Bash), PostToolUseFailure(Bash): 지금 다루는 파일 이름, 새로 부르는 API, 명령이 다루는 파일, 언어별 에러(종료 코드 0 인 명령의 출력도 에러 형식에 맞으면)로 인덱스 줄을 찾아 기억의 키워드를 `[기억]` 으로 건넨다. 작업 점수를 순위에 더하고, 연 파일과 명령의 후보 가운데 작업과 닿지 않고 파일 이름으로도 맞지 않은 것은 뺀다. 항목 1~2개, 항목당 약 50자.
+  - UserPromptSubmit: 요청 글로는 떠올리지 않는다(`/claude-brain-*` 제어 명령만 처리). 이 요청에 무엇이 필요한지, 얼마나 애써 찾을지는 세션이 판단하고 recall.sh 로 찾는다 - 글자 일치로 흉내 낸 요청 떠올림은 정밀도가 낮아 걷어 냈다(2026-10-28 재생).
+  - PreToolUse(Edit/Write/Bash), PostToolUse(Read, Bash), PostToolUseFailure(Bash): 지금 다루는 파일 이름, 새로 부르는 API, 명령이 다루는 파일, 언어별 에러(종료 코드 0 인 명령의 출력도 에러 형식에 맞으면)로 인덱스 줄을 찾아 기억의 키워드를 `[기억]` 으로 건넨다. 항목 1~2개, 항목당 약 50자.
   - 세션에 보이는 것은 **기억 파일 이름(키워드, 끝 날짜를 뗀 것)**이고, 세션은 `recall.sh <키워드>` 로 펼친다(맨 위 히트가 그 기억이라 본문이 열린다). 그래서 파일 이름 = 뜻이 읽히는 영어 kebab 문장, 인덱스 줄 앞부분(첫 링크까지) = 식별자와 요지가 떠올림 품질을 정한다. 세션이 recall.sh 로 펼친 것도 열람(open)으로 기록한다.
-  - SubagentStart: 한 줄(작업 폴더 프로젝트 + [기억] 은 장기 기억 + recall.sh 로 찾는 법). 서브에이전트는 메인 세션의 작업 낱말을 쓴다.
+  - SubagentStart: 한 줄(작업 폴더 프로젝트 + [기억] 은 장기 기억 + recall.sh 로 찾는 법).
   - Stop(턴 끝), PreCompact(압축 직전), SessionEnd: 새로 쌓인 대화록 구간이 두드러지면 `replay.py awake` 를 백그라운드로 띄운다 → hippocampus `replay` 요청(payload.kind = "awake").
 - **대화록 = 단기 기억 버퍼**. 처리 위치는 `<brain>/.active/replay-marks.json`(대화록별 바이트) 하나를 깨어 있는 중 재생과 밤 재생이 같이 쓴다. 같은 구간을 두 번 넘기지 않는다.
 - **replay 요청 payload**: `{kind: "awake"|"sleep", digest: <요약 파일>, session, transcript, score, bytes: [시작, 끝]}`. 요약은 그 구간만 담고, 구간이 중간부터면 "세션 첫 요청(맥락)" 한 줄이 있다. awake 는 effort medium, sleep 은 high.

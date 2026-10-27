@@ -162,7 +162,7 @@ Most of them are handled by the hook directly and use no tokens. Output follows 
 
 ## Cost and privacy
 
-- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most) and the keywords of memories recalled while you work, including those that match your request (capped at 9,000 characters per session). Replaying 80 of the author's transcripts, the session-start map averaged about 2,500 characters and the keywords about 1,000 characters per session (2026-10-28; about 2,700 before the switch to keywords). Each hook call takes about 25 ms.
+- Recall makes no extra API calls. It does add context, though: the project's memory map at session start (about 6,000 characters at most) and the keywords of memories recalled while you work (capped at 9,000 characters per session). Replaying 80 of the author's transcripts, the session-start map averaged about 2,500 characters and the keywords about 1,000 characters per session (2026-10-28; about 2,700 before the switch to keywords). Each hook call takes about 25 ms.
 - The hippocampus uses your Claude usage. It runs `claude -p` once per job (Sonnet 5.5 at medium effort by default). On the demo memory store we measured $0.06 to $0.13 per recording job and $0.05 to $0.11 per tidy-up job, at API prices. Real projects with more memories cost a bit more. To spend less, try `/claude-brain-config eco`.
 - The app's AI features (bubbles, plain-word explanations, asking) call Claude Haiku at about $0.002 to $0.004 per call. Explanations are cached.
 - You can check what was spent at any time in `/claude-brain-status` or in the app's "Usage" card. On a Pro or Max plan this is a measure of how much was used, not what you are billed.
@@ -271,15 +271,15 @@ The hooks run on SessionStart, UserPromptSubmit, PreToolUse (Edit, Write, MultiE
 | Hook event | Clues |
 |---|---|
 | SessionStart | Project gist, the project's `INDEX.md` (capped at 3,000 chars), the stack and shared indexes (2,000 and 1,200 chars), procedure-card lines |
-| UserPromptSubmit | Keywords of memories whose titles match several words of your request (task words). Nothing is added when nothing matches |
+| UserPromptSubmit | Nothing is recalled. The session judges what a request needs and searches with `recall.sh` (only `/claude-brain-*` commands are handled here) |
 | PostToolUse (Read, Bash) | Name of the file opened, errors in the output of a command that exited with 0 |
-| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | Name of the file being edited, API names new in the edit (plan files `plans/*.md` feed the task words instead) |
+| PreToolUse (Edit, Write, MultiEdit, NotebookEdit) | Name of the file being edited, API names new in the edit |
 | PreToolUse (Bash) | Files the command reads or writes, API names in code inside the command |
 | PostToolUseFailure (Bash) | Files, error codes, quoted identifiers and exception names from per-language error formats, and the file of the stack frame inside the project |
 | SubagentStart | The working folder's project and a line on what `[memory]` means |
 | Stop, PreCompact, SessionEnd | No recall; starts a replay if the new stretch of conversation stands out |
 
-- When nothing matches, nothing is printed. Only memory keywords (file names) are passed, not their contents (about 50 characters each); the session decides whether to expand one with `recall.sh <keyword>`. With task words, memories related to the task come first, and candidates recalled by an opened file or a command's file that do not touch the task are dropped. At most 1 or 2 memories at a time (1 for Bash), and 40 memories or 9,000 characters per session (the session-start map is counted separately).
+- When nothing matches, nothing is printed. Only memory keywords (file names) are passed, not their contents (about 50 characters each); the session decides whether to expand one with `recall.sh <keyword>`. At most 1 or 2 memories at a time (1 for Bash), and 40 memories or 9,000 characters per session (the session-start map is counted separately).
 - A clue that matches 4 or more different memories is treated as too common; only memories with that clue in their file name are kept.
 - We replayed 431 past sessions and had Sonnet judge 371 recalls. brain recalls only where the share judged "distracting" was low: file reads (0 to 3%), right before edits (8 to 20%) and files touched by commands (about 10%). It does not use request text (64%), "it doesn't work" conclusions (75%) or CLI names inside commands (64%) as clues.
 </details>
