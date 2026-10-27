@@ -341,7 +341,7 @@ def project_file(p, root):
     """[프로젝트의 파일인가] 라이브러리(node_modules, site-packages, .cargo 등), 런타임 내부, 프로젝트 밖 임시 파일은 아니다.
     상대 경로는 프로젝트 것으로 본다
     """
-    if not p:
+    if not p or p.startswith('<'):   # <string>, <stdin>, <frozen ...> 같은 가상 프레임
         return False
     if p.startswith('file://'):
         p = p[7:]
