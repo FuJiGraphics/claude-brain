@@ -1,6 +1,7 @@
 #!/bin/bash
 # brain 의식적 떠올리기 - 이름(파일, 심볼, API, 에러 문자열, 한국어 증상)으로 기억 저장소(cortex)를 찾는다.
-# 세션은 이 도구를 모른다(기억은 thalamus 가 떠올려 준다). 사용자의 /brain 과 hippocampus 의 확인 단계가 쓴다.
+# 세션은 thalamus 가 건넨 키워드(기억 파일 이름)나 심볼, 에러 문자열, 증상으로 이 도구를 불러 기억을 펼친다(세션 시작 범례가 알린다).
+# 사용자의 /claude-brain-recall 과 hippocampus 의 확인 단계도 쓴다. 세션이 부른 것은 thalamus 가 열람(open)으로 기록한다.
 # 사용법: recall.sh [--root <프로젝트 루트>] <이름1> [이름2] ...
 #   범위: 현재 폴더(또는 --root)가 속한 registry 프로젝트의 projects, stacks, common 3레이어. 등록 안 된 곳이면 common 만.
 #   찾은 기억 본문을 예산 안에서 함께 싣고, 같은 세션에서 이미 실은 본문은 경로만 보인다. 인덱스에서 못 찾으면 본문과
