@@ -1,0 +1,19 @@
+{
+ "id": "gen-rates",
+ "depth": [
+  "low",
+  "medium",
+  "high"
+ ],
+ "max_turns": 25,
+ "prompt": "`python3 -m unittest` 이 깨진다. 원인을 찾아 고쳐 줘.",
+ "key": [
+  "gen-rates-built-with-half-even-rounding-2026-09-02"
+ ],
+ "kind": "기억이 있어야 맞히는 과제(사용자 결정)",
+ "criteria": [
+  "python3 -m unittest 통과",
+  "ledger/gen/rates.py 가 `tools/build_rates.py --rounding half-even` 의 출력과 같다(생성기 옵션은 사용자 결정 - 기억에만 있다)",
+  "tools/build_rates.py, data/rates.csv, ledger/rates.py, tests/ 를 바꾸지 않았다"
+ ]
+}

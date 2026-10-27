@@ -1,0 +1,27 @@
+{
+ "id": "split-bill",
+ "depth": [
+  "medium",
+  "high"
+ ],
+ "max_turns": 25,
+ "prompt": "ledger/money.py 에 split_bill(total_cents, n) 함수를 추가해 줘. 총액 total_cents 를 n 명이 나눠 낼 금액 목록(정수 센트)을 돌려준다. 시험도 함께 추가해 줘.",
+ "key": [
+  "split-bill-remainder-goes-to-last-payer-2026-09-10"
+ ],
+ "kind": "기억이 있어야 맞히는 과제(사용자 결정)",
+ "criteria": [
+  "python3 -m unittest 통과",
+  "split_bill(1000, 3) == [333, 333, 334], split_bill(1001, 4) == [250, 250, 250, 251], split_bill(900, 3) == [300, 300, 300] (나머지는 마지막 사람 - 기억에만 있다)",
+  "모든 값이 int, 합이 총액과 같다"
+ ],
+ "setup": [
+  [
+   "python3",
+   "tools/build_rates.py",
+   "--rounding",
+   "half-even"
+  ]
+ ],
+ "setup_note": "시작 상태: 생성 파일을 올바르게 만든 뒤 시작한다(시험이 모두 통과하는 상태)"
+}
